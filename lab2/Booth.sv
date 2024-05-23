@@ -2,61 +2,78 @@
 module Booth(
   input         clock,
                 reset,
-  input  [8:0]  io_x,
+                io_start,
+  input  [7:0]  io_x,
                 io_y,
-  input         io_start,
   output [15:0] io_z,
   output        io_busy
 );
 
   reg        state;
-  reg [1:0]  q_reg;
-  reg [2:0]  cnt_value;
+  reg        busy;
   reg [7:0]  _x;
   reg [7:0]  _y;
   reg [15:0] _z;
-  reg        busy;
+  reg [2:0]  cnt_value;
   always @(posedge clock) begin
     if (reset) begin
       state <= 1'h0;
-      q_reg <= 2'h0;
-      cnt_value <= 3'h0;
+      busy <= 1'h0;
       _x <= 8'h0;
       _y <= 8'h0;
       _z <= 16'h0;
-      busy <= 1'h0;
+      cnt_value <= 3'h0;
     end
     else begin
+      automatic logic [15:0] _GEN;
+      _GEN = {_z[15], _z[15:1]};
       if (state) begin
-        automatic logic [2:0] _q_reg_T_2;
-        _q_reg_T_2 = cnt_value + 3'h1;
-        state <= &cnt_value;
-        if (state & (&cnt_value)) begin
-          automatic logic [7:0]       _q_reg_T_6 = _y >> cnt_value;
-          automatic logic [7:0]       _q_reg_T_4;
-          automatic logic [3:0][15:0] _GEN =
-            {{{1'h0, _z[15:1]}},
-             {{1'h0, _z[15:8] - _x, _z[7:1]}},
-             {{1'h0, _z[15:8] + _x, _z[7:1]}},
-             {{1'h0, _z[15:1]}}};
-          _q_reg_T_4 = _y >> _q_reg_T_2;
-          q_reg <= {_q_reg_T_4[0], _q_reg_T_6[0]};
-          _z <= _GEN[q_reg];
+        automatic logic [2:0] _q_T_1;
+        _q_T_1 = cnt_value + 3'h1;
+        state <= ~(&cnt_value);
+        busy <= ~(&cnt_value);
+        if (~state | (&cnt_value)) begin
         end
-        cnt_value <= _q_reg_T_2;
-        busy <= &cnt_value;
+        else begin
+          automatic logic [7:0] _q_T_5 = $signed($signed(_y) >>> cnt_value);
+          automatic logic [7:0] _q_T_3;
+          automatic logic [1:0] _q_1;
+          _q_T_3 = $signed($signed(_y) >>> _q_T_1);
+          _q_1 = {_q_T_3[0], _q_T_5[0]};
+          if (_q_1 == 2'h0 | (&_q_1))
+            _z <= _GEN;
+          else begin
+            automatic logic [15:0] _GEN_0;
+            _GEN_0 = {_x, 8'h0};
+            if (_q_1 == 2'h1) begin
+              automatic logic [15:0] _z_T_16;
+              _z_T_16 = _z + _GEN_0;
+              _z <= {_z_T_16[15], _z_T_16[15:1]};
+            end
+            else if (_q_1 == 2'h2) begin
+              automatic logic [15:0] _z_T_21;
+              _z_T_21 = _z - _GEN_0;
+              _z <= {_z_T_21[15], _z_T_21[15:1]};
+            end
+          end
+        end
+        cnt_value <= _q_T_1;
       end
       else begin
         state <= io_start | state;
-        if (io_start) begin
-          q_reg <= {io_y[0], 1'h0};
-          _z <= {7'h0, io_y};
-        end
         busy <= io_start | busy;
+        if (io_start) begin
+          if (io_y[0]) begin
+            automatic logic [7:0] _z_T_6 = 8'h0 - io_x;
+            _z <= {_z_T_6[7], _z_T_6, io_y[7:1]};
+          end
+          else
+            _z <= _GEN;
+        end
       end
       if (~state & io_start) begin
-        _x <= io_x[7:0];
-        _y <= io_y[7:0];
+        _x <= io_x;
+        _y <= io_y;
       end
     end
   end // always @(posedge)

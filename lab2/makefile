@@ -1,14 +1,14 @@
 # Source and testbench files
-TOP_MODULE = Divider
+TOP_MODULE = Booth
 VERILOG_SRC = $(TOP_MODULE).sv
-CHISEL_SRC = src/main/scala/divider/$(TOP_MODULE).scala
+CHISEL_SRC = src/main/scala/booth/$(TOP_MODULE).scala
 # TESTBENCH_SRC = src/test/cxx/main.cxx
 TESTBENCH_SRC = src/test/cxx/$(TOP_MODULE).cxx
 SIM_EXEC = obj_dir/V$(TOP_MODULE)
 
 # Makefile for Verilator simulation
 VERILATOR = verilator
-VERILATOR_FLAGS = -Wall --cc --trace -Iobj_dir
+VERILATOR_FLAGS = -Wall --cc --trace -Iobj_dir -Wno-UNUSEDSIGNAL
 
 all: $(SIM_EXEC)
 

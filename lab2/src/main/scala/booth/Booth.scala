@@ -2,83 +2,91 @@ package booth
 
 import chisel3._
 import chisel3.util._
-import scala.annotation.switch
-import scala.util.control.Exception.Catch
-import scala.util.matching.Regex
 
-/**
-  * 补码，booth 乘法器
-  *
-  * @param width
-  */
-class Booth(width: Int) extends Module {
+class Booth(val width: Int) extends Module {
   val io = IO(new Bundle {
-    val x     = Input(UInt((width + 1).W)) // 原码
-    val y     = Input(UInt((width + 1).W))
     val start = Input(Bool())
-    val z     = Output(UInt((2 * width).W)) // 商
-    val busy  = Output(Bool()) // 忙信号
+    val x     = Input(SInt(width.W))
+    val y     = Input(SInt(width.W))
+    val z     = Output(SInt((2 * width).W))
+    val busy  = Output(Bool())
   })
 
-  val sIDLE :: sCompute :: Nil = Enum(2)
-  val state                    = RegInit(sIDLE)
-
-  val q_reg = RegInit(0.U(2.W)) // 用来存放最后两位
-
-  val cnt = Counter(width) // 右移次数
-
-  val _x = RegInit(0.U((width).W))
-  val _y = RegInit(0.U((width).W))
-
-  val _z = RegInit(0.U((2 * width).W))
-  io.z := _z
+  // State definitions
+  val sIdle :: sCompute :: Nil = Enum(2)
+  val state                    = RegInit(sIdle)
 
   val busy = RegInit(false.B)
   io.busy := busy
 
-  switch(state) {
-    is(sIDLE) {
-      when(io.start) {
-        /* ---------- init ---------- */
-        q_reg := Cat(io.y(0), 0.U(1.W))
-        _x    := io.x(width - 1, 0)
-        _y    := io.y(width - 1, 0)
-        _z    := Cat(0.U(width.W), io.y)
-        busy  := true.B
+  val _x = RegInit(0.S(width.W))
+  val _y = RegInit(0.S(width.W))
+  val _z = RegInit(0.S((2 * width).W))
+  // Output connections
+  io.z := _z.asSInt
 
-        /* ---------- 状态转移 ---------- */
-        state := sCompute
-      }
-    }
-    is(sCompute) {
-      when(cnt.inc()) {
-        q_reg := Cat(_y(cnt.value + 1.U), _y(cnt.value))
-        switch(q_reg) {
-          is("b11".U) {
-            _z := (_z.asSInt >> 1).asUInt
-          }
-          is("b00".U) {
-            _z := (_z.asSInt >> 1).asUInt
+  // Counter for shifts
+  val cnt = Counter(width)
+
+  // printf("---------- cnt=%d ----------\n", cnt.value)
+  // printf("_z: %b\n", _z)
+
+  // State transition logic
+  switch(state) {
+    is(sIdle) {
+      when(io.start) {
+        val _q = Cat(io.y(0), 0.U(1.W))
+        switch(_q) {
+          is("b00".U, "b11".U) {
+            _z := _z.asSInt >> 1
           }
           is("b01".U) {
-            _z := (Cat(_z(width + width - 1, width) + _x.asUInt, _z(width - 1, 0)).asSInt >> 1).asUInt
+            _z := Cat(io.x.asUInt, io.y.asUInt).asSInt >> 1
           }
           is("b10".U) {
-            _z := (Cat(_z(width + width - 1, width) - _x.asUInt, _z(width - 1, 0)).asSInt >> 1).asUInt
+            _z := Cat((-io.x).asUInt, io.y.asUInt).asSInt >> 1
           }
         }
 
-        state := sCompute
+        /* ---------- 状态 ---------- */
         busy  := true.B
-      }.otherwise {
+        state := sCompute
 
-        state := sIDLE
+        /* ---------- init ---------- */
+        _x := io.x
+        _y := io.y
+      }
+    }
+    is(sCompute) {
+      when(cnt.inc()) { // Increment the counter and check if it has reached its maximum
+
+        /* ---------- 状态 ---------- */
+        state := sIdle
         busy  := false.B
+      }.otherwise {
+        val _q = Cat(_y(cnt.value + 1.U), _y(cnt.value))
+        switch(_q) {
+          is("b00".U, "b11".U) {
+            _z := _z.asSInt >> 1
+          }
+          is("b01".U) {
+            _z := (_z + (_x << width)).asSInt >> 1
+          }
+          is("b10".U) {
+            _z := (_z - (_x << width)).asSInt >> 1
+          }
+        }
+
+        /* ---------- 状态 ---------- */
+        busy  := true.B
+        state := sCompute
       }
     }
   }
 
 }
+
+// The module can be instantiated and tested in a Chisel tester or used as part of a larger design.
 
 import _root_.circt.stage.ChiselStage
 
