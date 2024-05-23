@@ -7,24 +7,24 @@ import chisel3.util._
 
 /** @param width 不包含符号位，要求 width 是 2 的次幂
   */
-class Divider(width: Int) extends Module {
+class Divider(_width: Int) extends Module {
+  // require(isPow2(_width))
+  val width = _width - 1
   val io = IO(new Bundle {
     val x     = Input(UInt((width + 1).W)) // 原码
     val y     = Input(UInt((width + 1).W))
     val start = Input(Bool())
     val z     = Output(UInt((width + 1).W)) // 商
-    val r     = Output(UInt((width).W)) // 余数，不包含符号位
+    val r     = Output(UInt((width + 1).W)) // 余数，不包含符号位
     val busy  = Output(Bool()) // 忙信号
   })
-
-  require(isPow2(width))
 
   val quotient      = RegInit(0.U(width.W))
   val quotient_sign = Reg(Bool()) // 商的符号位
   io.z := Cat(quotient_sign, quotient)
 
   val remain = RegInit(0.U((2 * width).W))
-  io.r := remain(2 * width - 2, width - 1)
+  io.r := Cat(0.U(1.W), remain(2 * width - 2, width - 1))
 
   val cnt      = Counter(width)
   val extend_y = RegInit(0.U((2 * width).W))
@@ -70,7 +70,8 @@ class Divider(width: Int) extends Module {
         busy  := false.B
         state := sIDLE
 
-        remain := Mux(remain(2 * width - 1), remain + extend_y, remain - extend_y)
+        // 如果最后余数是 负数，那么就加回去
+        remain := Mux(remain(2 * width - 1), remain + extend_y, remain)
 
       }.otherwise {
         /* ---------- 一些初始化 ---------- */
@@ -88,9 +89,9 @@ class Divider(width: Int) extends Module {
     }
   }
 
-  printf("---------- cnt=%d ----------\n", cnt.value)
-  printf("remain: %b\n", remain)
-  printf("quotient: %b\n", quotient)
+//   printf("---------- cnt=%d ----------\n", cnt.value)
+//   printf("quotient: %b\n", quotient)
+//   printf("remain: %b\n", remain)
 }
 
 import _root_.circt.stage.ChiselStage

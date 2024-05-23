@@ -3,7 +3,7 @@ TOP_MODULE = Divider
 VERILOG_SRC = $(TOP_MODULE).sv
 CHISEL_SRC = src/main/scala/divider/$(TOP_MODULE).scala
 # TESTBENCH_SRC = src/test/cxx/main.cxx
-TESTBENCH_SRC = src/test/cxx/tb.cxx
+TESTBENCH_SRC = src/test/cxx/$(TOP_MODULE).cxx
 SIM_EXEC = obj_dir/V$(TOP_MODULE)
 
 # Makefile for Verilator simulation
@@ -18,7 +18,7 @@ $(VERILOG_SRC): $(CHISEL_SRC)
 
 $(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC)
 	@echo "Compiling Verilog source..."
-	$(VERILATOR) $(VERILATOR_FLAGS) $(VERILOG_SRC) --exe $(TESTBENCH_SRC)
+	$(VERILATOR) $(VERILATOR_FLAGS) $(VERILOG_SRC) --exe $(TESTBENCH_SRC) 
 	@echo "Building C++ simulation model..."
 	$(MAKE) -C obj_dir -f V$(TOP_MODULE).mk
 
