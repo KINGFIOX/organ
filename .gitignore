@@ -1,4 +1,6 @@
 .*
 !.gitignore
+!.scalafmt.conf
 *.docx
 archive
+target
