@@ -12,6 +12,7 @@ module Divider(
 
   reg [6:0]  quotient;
   reg        quotient_sign;
+  reg        remain_sign;
   reg [13:0] remain;
   reg [2:0]  cnt_value;
   reg [13:0] extend_y;
@@ -22,6 +23,7 @@ module Divider(
     _GEN = ~state & io_start;
     if (reset) begin
       quotient <= 7'h0;
+      remain_sign <= 1'h0;
       remain <= 14'h0;
       cnt_value <= 3'h0;
       extend_y <= 14'h0;
@@ -65,15 +67,17 @@ module Divider(
         end
         state <= io_start | state;
       end
-      if (_GEN)
+      if (_GEN) begin
+        remain_sign <= io_x[7];
         extend_y <= {1'h0, io_y[6:0], 6'h0};
+      end
       busy <= state & (state ? ~wrap : busy);
     end
     if (_GEN)
       quotient_sign <= io_x[7] ^ io_y[7];
   end // always @(posedge)
   assign io_z = {quotient_sign, quotient};
-  assign io_r = {1'h0, remain[12:6]};
+  assign io_r = {remain_sign, remain[12:6]};
   assign io_busy = busy;
 endmodule
 

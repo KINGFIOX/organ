@@ -23,8 +23,9 @@ class Divider(_width: Int) extends Module {
   val quotient_sign = Reg(Bool()) // 商的符号位
   io.z := Cat(quotient_sign, quotient)
 
-  val remain = RegInit(0.U((2 * width).W))
-  io.r := Cat(0.U(1.W), remain(2 * width - 2, width - 1))
+  val remain_sign = RegInit(0.U(1.W))
+  val remain      = RegInit(0.U((2 * width).W))
+  io.r := Cat(remain_sign, remain(2 * width - 2, width - 1))
 
   val cnt      = Counter(width)
   val extend_y = RegInit(0.U((2 * width).W))
@@ -45,7 +46,8 @@ class Divider(_width: Int) extends Module {
         // 1101 0
         val abs_y         = io.y(width - 1, 0)
         val wire_extend_y = Cat(0.U(1.W), abs_y, 0.U((width - 1).W)) // 2 * width
-        extend_y := wire_extend_y
+        extend_y    := wire_extend_y
+        remain_sign := io.x(width)
 
         // 保存符号
         quotient_sign := io.x(width) ^ io.y(width)
