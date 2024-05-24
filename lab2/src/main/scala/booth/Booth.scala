@@ -6,9 +6,9 @@ import chisel3.util._
 class Booth(val width: Int) extends Module {
   val io = IO(new Bundle {
     val start = Input(Bool())
-    val x     = Input(SInt(width.W))
-    val y     = Input(SInt(width.W))
-    val z     = Output(SInt((2 * width).W))
+    val x     = Input(UInt(width.W))
+    val y     = Input(UInt(width.W))
+    val z     = Output(UInt((2 * width).W))
     val busy  = Output(Bool())
   })
 
@@ -19,17 +19,14 @@ class Booth(val width: Int) extends Module {
   val busy = RegInit(false.B)
   io.busy := busy
 
-  val _x = RegInit(0.S(width.W))
-  val _y = RegInit(0.S(width.W))
-  val _z = RegInit(0.S((2 * width).W))
+  val _x = RegInit(0.U(width.W))
+  val _y = RegInit(0.U(width.W))
+  val _z = RegInit(0.U((2 * width).W))
   // Output connections
-  io.z := _z.asSInt
+  io.z := _z
 
   // Counter for shifts
   val cnt = Counter(width)
-
-  // printf("---------- cnt=%d ----------\n", cnt.value)
-  // printf("_z: %b\n", _z)
 
   // State transition logic
   switch(state) {
@@ -38,13 +35,21 @@ class Booth(val width: Int) extends Module {
         val _q = Cat(io.y(0), 0.U(1.W))
         switch(_q) {
           is("b00".U, "b11".U) {
-            _z := _z.asSInt >> 1
+            val __z      = Cat(0.U(width.W), io.y)
+            val __z_sign = __z(2 * width - 1)
+            _z := /* (_z.asSInt >> 1).asUInt */ Cat(__z_sign, __z(2 * width - 1, 1))
           }
           is("b01".U) {
-            _z := Cat(io.x.asUInt, io.y.asUInt).asSInt >> 1
+            // _z := (Cat(io.x, io.y).asSInt >> 1).asUInt
+            val __z      = Cat(io.x, io.y)
+            val __z_sign = __z(2 * width - 1)
+            _z := /* (_z.asSInt >> 1).asUInt */ Cat(__z_sign, __z(2 * width - 1, 1))
           }
           is("b10".U) {
-            _z := Cat((-io.x).asUInt, io.y.asUInt).asSInt >> 1
+            // _z := (Cat(-io.x, io.y).asSInt >> 1).asUInt
+            val __z      = Cat(-io.x, io.y)
+            val __z_sign = __z(2 * width - 1)
+            _z := /* (_z.asSInt >> 1).asUInt */ Cat(__z_sign, __z(2 * width - 1, 1))
           }
         }
 
@@ -60,6 +65,11 @@ class Booth(val width: Int) extends Module {
     is(sCompute) {
       when(cnt.inc()) { // Increment the counter and check if it has reached its maximum
 
+        // 很奇怪
+        when(_x === Cat(1.U(1.W), 0.U((width - 1).W))) {
+          _z := -_z
+        }
+
         /* ---------- 状态 ---------- */
         state := sIdle
         busy  := false.B
@@ -67,13 +77,22 @@ class Booth(val width: Int) extends Module {
         val _q = Cat(_y(cnt.value + 1.U), _y(cnt.value))
         switch(_q) {
           is("b00".U, "b11".U) {
-            _z := _z.asSInt >> 1
+            // _z := (_z.asInt >> 1).asUInt
+            val __z      = _z
+            val __z_sign = __z(2 * width - 1)
+            _z := Cat(__z_sign, __z(2 * width - 1, 1))
           }
           is("b01".U) {
-            _z := (_z + (_x << width)).asSInt >> 1
+            // _z := ((_z + (_x << width)).asSInt >> 1).asUInt
+            val __z      = _z + Cat(_x, 0.U(width.W))
+            val __z_sign = __z(2 * width - 1)
+            _z := Cat(__z_sign, __z(2 * width - 1, 1))
           }
           is("b10".U) {
-            _z := (_z - (_x << width)).asSInt >> 1
+            // _z := ((_z - (_x << width)).asSInt >> 1).asUInt
+            val __z      = _z - Cat(_x, 0.U(width.W))
+            val __z_sign = __z(2 * width - 1)
+            _z := Cat(__z_sign, __z(2 * width - 1, 1))
           }
         }
 

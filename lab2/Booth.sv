@@ -25,35 +25,35 @@ module Booth(
       cnt_value <= 3'h0;
     end
     else begin
-      automatic logic [15:0] _GEN;
-      _GEN = {_z[15], _z[15:1]};
       if (state) begin
         automatic logic [2:0] _q_T_1;
         _q_T_1 = cnt_value + 3'h1;
         state <= ~(&cnt_value);
         busy <= ~(&cnt_value);
-        if (~state | (&cnt_value)) begin
+        if (&cnt_value) begin
+          if (_x == 8'h80)
+            _z <= 16'h0 - _z;
         end
         else begin
-          automatic logic [7:0] _q_T_5 = $signed($signed(_y) >>> cnt_value);
+          automatic logic [7:0] _q_T_5 = _y >> cnt_value;
           automatic logic [7:0] _q_T_3;
           automatic logic [1:0] _q_1;
-          _q_T_3 = $signed($signed(_y) >>> _q_T_1);
+          _q_T_3 = _y >> _q_T_1;
           _q_1 = {_q_T_3[0], _q_T_5[0]};
           if (_q_1 == 2'h0 | (&_q_1))
-            _z <= _GEN;
+            _z <= {_z[15], _z[15:1]};
           else begin
-            automatic logic [15:0] _GEN_0;
-            _GEN_0 = {_x, 8'h0};
+            automatic logic [15:0] _GEN;
+            _GEN = {_x, 8'h0};
             if (_q_1 == 2'h1) begin
-              automatic logic [15:0] _z_T_16;
-              _z_T_16 = _z + _GEN_0;
-              _z <= {_z_T_16[15], _z_T_16[15:1]};
+              automatic logic [15:0] __z_T_3;
+              __z_T_3 = _z + _GEN;
+              _z <= {__z_T_3[15], __z_T_3[15:1]};
             end
             else if (_q_1 == 2'h2) begin
-              automatic logic [15:0] _z_T_21;
-              _z_T_21 = _z - _GEN_0;
-              _z <= {_z_T_21[15], _z_T_21[15:1]};
+              automatic logic [15:0] __z_T_5;
+              __z_T_5 = _z - _GEN;
+              _z <= {__z_T_5[15], __z_T_5[15:1]};
             end
           end
         end
@@ -63,12 +63,8 @@ module Booth(
         state <= io_start | state;
         busy <= io_start | busy;
         if (io_start) begin
-          if (io_y[0]) begin
-            automatic logic [7:0] _z_T_6 = 8'h0 - io_x;
-            _z <= {_z_T_6[7], _z_T_6, io_y[7:1]};
-          end
-          else
-            _z <= _GEN;
+          automatic logic [7:0] __z_T_1 = 8'h0 - io_x;
+          _z <= {io_y[0] ? {__z_T_1[7], __z_T_1} : 9'h0, io_y[7:1]};
         end
       end
       if (~state & io_start) begin

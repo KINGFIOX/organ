@@ -4,21 +4,21 @@ $timescale 1ps $end
   $var wire 1 & clock $end
   $var wire 1 ' reset $end
   $var wire 1 ( io_start $end
-  $var wire 8 ) io_x [7:0] $end
-  $var wire 8 * io_y [7:0] $end
-  $var wire 16 + io_z [15:0] $end
+  $var wire 4 ) io_x [3:0] $end
+  $var wire 4 * io_y [3:0] $end
+  $var wire 8 + io_z [7:0] $end
   $var wire 1 , io_busy $end
   $scope module Booth $end
    $var wire 1 & clock $end
    $var wire 1 ' reset $end
    $var wire 1 ( io_start $end
-   $var wire 8 ) io_x [7:0] $end
-   $var wire 8 * io_y [7:0] $end
-   $var wire 16 + io_z [15:0] $end
+   $var wire 4 ) io_x [3:0] $end
+   $var wire 4 * io_y [3:0] $end
+   $var wire 8 + io_z [7:0] $end
    $var wire 1 , io_busy $end
    $var wire 1 # state $end
    $var wire 1 $ busy $end
-   $var wire 3 % cnt_value [2:0] $end
+   $var wire 2 % cnt_value [1:0] $end
   $upscope $end
  $upscope $end
 $enddefinitions $end
@@ -27,13 +27,13 @@ $enddefinitions $end
 #0
 0#
 0$
-b000 %
+b00 %
 1&
 1'
 0(
-b00000000 )
-b00000000 *
-b0000000000000000 +
+b0000 )
+b0000 *
+b00000000 +
 0,
 #10
 0&
@@ -45,8 +45,8 @@ b0000000000000000 +
 1&
 #45
 0'
-b11110011 )
-b00000110 *
+b1000 )
+b0101 *
 #50
 0&
 #55
@@ -54,58 +54,51 @@ b00000110 *
 1$
 1&
 1(
+b11000010 +
 1,
 #60
 0&
 #65
-b001 %
+b01 %
 1&
 0(
-b0000011010000000 +
+b00100001 +
 #70
 0&
 #75
-b010 %
+b10 %
 1&
-b0000001101000000 +
+b11010000 +
 #80
 0&
 #85
-b011 %
+b11 %
 1&
-b1111101100100000 +
+b00101000 +
 #90
 0&
 #95
-b100 %
+0#
+0$
+b00 %
 1&
-b1111110110010000 +
+0,
 #100
 0&
 #105
-b101 %
 1&
-b1111111011001000 +
 #110
 0&
 #115
-b110 %
 1&
-b1111111101100100 +
 #120
 0&
 #125
-b111 %
 1&
-b1111111110110010 +
 #130
 0&
 #135
-0#
-0$
-b000 %
 1&
-0,
 #140
 0&
 #145

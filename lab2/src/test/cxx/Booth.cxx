@@ -16,8 +16,8 @@ int main(int argc, char** argv)
 
     size_t success_cnt = 0;
 
-    for (int x = -128; x <= 127; x++) {
-        for (int y = -128; y <= 127; y++) {
+    for (int8_t x = -128; x != 127; x++) {
+        for (int8_t y = -128; y != 127; y++) {
 
             auto dut = std::make_unique<VBooth>();
 
@@ -49,17 +49,17 @@ int main(int argc, char** argv)
                 dut->io_start = 0;
             }
 
-            int top_z = sext(dut->io_z, 16);
+            int16_t top_z = dut->io_z;
 
             dut->final();
 
-            if (int z = x * y; z == top_z) {
+            if (int16_t z = x * y; z == top_z) {
                 success_cnt++;
             } else {
                 fail_cnt++;
                 std::cout << "---------- ----------" << std::endl;
-                std::cout << "x: " << x << std::endl;
-                std::cout << "y: " << y << std::endl;
+                std::cout << "x: " << (int)x << std::endl;
+                std::cout << "y: " << (int)y << std::endl;
                 std::cout << "x*y: " << z << std::endl;
                 std::cout << "mul: " << (int)top_z << std::endl;
                 // 补码
@@ -102,8 +102,11 @@ int main(int argc, char** argv)
     }
     dut->reset = 0;
 
-    int x = -13;
-    int y = 6;
+    int4_t x { 0b1000 }, y { 0b0101 };
+    // int8_t x = 0b1000; // -8
+    // int8_t y = 0b1010; // -6
+
+    // BoothTx tx = { .x = 0b1000, .y = 0b1010 };
 
     // 主仿真循环
     for (int cycle = 0; cycle < 40; cycle++) {
@@ -123,20 +126,19 @@ int main(int argc, char** argv)
     }
 
     // 收集结果和清理
-    int top_z = dut->io_z;
+    int8_t top_z = dut->io_z;
 
     dut->final();
     vcd->close(); // 关闭VCD文件
 
-    // 结果打印和统计略...
-    if (int z = x * y; z == top_z) {
+    if (int8_t z = x * y; z == top_z) {
         success_cnt++;
     } else {
         fail_cnt++;
         std::cout << "---------- ----------" << std::endl;
         std::cout << "x: " << x << std::endl;
         std::cout << "y: " << y << std::endl;
-        std::cout << "x*y: " << z << std::endl;
+        std::cout << "x*y: " << (int)z << std::endl;
         std::cout << "mul: " << (int)top_z << std::endl;
         std::cout << "x*y:\t\t" << std::bitset<8>(z).to_string() << std::endl;
         std::cout << "mul:\t\t" << std::bitset<8>(dut->io_z).to_string() << std::endl;
