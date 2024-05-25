@@ -5,10 +5,10 @@
 下面是我的环境搭建过程。
 
 1.  `curl -s "https://get.sdkman.io" | bash`
-2.  `https://www.scala-sbt.org/download/`
+2.  `sdk install sbt`
 3.  `sdk install java`
 4.  `sdk install scala 2.12.13`
-5.  verilator `sudo dnf install verilator verilator-devel`
+5.  verilator 推荐编译安装
 
 ## chisel template
 
