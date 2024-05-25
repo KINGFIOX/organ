@@ -6,13 +6,15 @@
 
 #include "inc.h"
 
+#ifndef WIDTH
+#define WIDTH 8 // 默认值
+#endif
+
 #if 1
 
 int main(int argc, char** argv)
 {
     Verilated::commandArgs(argc, argv);
-
-    size_t width = std::stoul(argv[1]);
 
     size_t fail_cnt = 0;
     size_t success_cnt = 0;
@@ -43,8 +45,8 @@ int main(int argc, char** argv)
                 dut->io_start = (cycle == 5);
 
                 // 输入原码
-                dut->io_x = two2ori(x, width);
-                dut->io_y = two2ori(y, width);
+                dut->io_x = two2ori(x, WIDTH);
+                dut->io_y = two2ori(y, WIDTH);
 
                 dut->clock = 1;
                 dut->eval();
@@ -56,8 +58,8 @@ int main(int argc, char** argv)
             }
 
             // 输出原码，转为补码
-            int top_z = ori2two(dut->io_z, width);
-            int top_r = ori2two(dut->io_r, width);
+            int top_z = ori2two(dut->io_z, WIDTH);
+            int top_r = ori2two(dut->io_r, WIDTH);
 
             dut->final();
 
@@ -69,11 +71,11 @@ int main(int argc, char** argv)
                 std::cout << "x: " << x << std::endl;
                 std::cout << "y: " << y << std::endl;
                 // 原码
-                std::cout << "x/y:\t\t" << std::bitset<8>(two2ori(z, width)).to_string() << std::endl;
-                std::cout << "quot:\t\t" << std::bitset<8>(dut->io_z).to_string() << std::endl;
+                std::cout << "x/y:\t\t" << std::bitset<WIDTH>(two2ori(z, WIDTH)).to_string() << std::endl;
+                std::cout << "quot:\t\t" << std::bitset<WIDTH>(dut->io_z).to_string() << std::endl;
                 // 原码
-                std::cout << "x%y:\t\t" << std::bitset<8>(two2ori(r, width)).to_string() << std::endl;
-                std::cout << "rema:\t\t" << std::bitset<8>(dut->io_r).to_string() << std::endl;
+                std::cout << "x%y:\t\t" << std::bitset<WIDTH>(two2ori(r, WIDTH)).to_string() << std::endl;
+                std::cout << "rema:\t\t" << std::bitset<WIDTH>(dut->io_r).to_string() << std::endl;
             }
         }
     }

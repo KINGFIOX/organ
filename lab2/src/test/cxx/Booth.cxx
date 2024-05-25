@@ -6,6 +6,10 @@
 
 #include "inc.h"
 
+#ifndef WIDTH
+#define WIDTH 8 // 默认值
+#endif
+
 #if 1
 
 int main(int argc, char** argv)
@@ -63,8 +67,8 @@ int main(int argc, char** argv)
                 std::cout << "x*y: " << z << std::endl;
                 std::cout << "mul: " << (int)top_z << std::endl;
                 // 补码
-                std::cout << "x*y:\t\t" << std::bitset<16>(z).to_string() << std::endl;
-                std::cout << "mul:\t\t" << std::bitset<16>(dut->io_z).to_string() << std::endl;
+                std::cout << "x*y:\t\t" << std::bitset<WIDTH * 2>(z).to_string() << std::endl;
+                std::cout << "mul:\t\t" << std::bitset<WIDTH * 2>(dut->io_z).to_string() << std::endl;
             }
         }
     }
@@ -140,8 +144,8 @@ int main(int argc, char** argv)
         std::cout << "y: " << y << std::endl;
         std::cout << "x*y: " << (int)z << std::endl;
         std::cout << "mul: " << (int)top_z << std::endl;
-        std::cout << "x*y:\t\t" << std::bitset<8>(z).to_string() << std::endl;
-        std::cout << "mul:\t\t" << std::bitset<8>(dut->io_z).to_string() << std::endl;
+        std::cout << "x*y:\t\t" << std::bitset<WIDTH * 2>(z).to_string() << std::endl;
+        std::cout << "mul:\t\t" << std::bitset<WIDTH * 2>(dut->io_z).to_string() << std::endl;
     }
 
     return 0;

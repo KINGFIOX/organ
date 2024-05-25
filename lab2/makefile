@@ -11,7 +11,7 @@ SIM_EXEC = obj_dir/V$(TOP_MODULE)
 
 # Makefile for Verilator simulation
 VERILATOR = verilator
-VERILATOR_FLAGS = -Wall --cc --trace -Iobj_dir -Wno-UNUSEDSIGNAL
+VERILATOR_FLAGS = -Wall --cc --trace -Iobj_dir -Wno-UNUSEDSIGNAL  -CFLAGS "-DWIDTH=$(WIDTH)"
 
 all: $(SIM_EXEC)
 
@@ -28,7 +28,7 @@ $(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC)
 # 生成 vcd 文件, 并用 dwfv 运行 cargo install dwfv
 .PHONY:
 run: $(SIM_EXEC)
-	@./$(SIM_EXEC) $(WIDTH)
+	@./$(SIM_EXEC)
 
 .PHONY:
 sim: run
