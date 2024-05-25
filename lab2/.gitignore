@@ -342,4 +342,3 @@ hs_err_pid*
 .*
 !.gitignore
 obj_dir
-
