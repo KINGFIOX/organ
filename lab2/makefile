@@ -1,5 +1,7 @@
-# Source and testbench files
+# 需要修改的配置
 TOP_MODULE = Booth
+MOUDLE_DIR = booth
+
 VERILOG_SRC = $(TOP_MODULE).sv
 CHISEL_SRC = src/main/scala/booth/$(TOP_MODULE).scala
 # TESTBENCH_SRC = src/test/cxx/main.cxx
@@ -14,7 +16,7 @@ all: $(SIM_EXEC)
 
 $(VERILOG_SRC): $(CHISEL_SRC)
 	@echo "Compiling chisel source..."
-	sbt run
+	sbt "runMain $(MOUDLE_DIR).$(TOP_MODULE)"
 
 $(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC)
 	@echo "Compiling Verilog source..."
