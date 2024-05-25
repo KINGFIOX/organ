@@ -1,9 +1,10 @@
 # 需要修改的配置
-TOP_MODULE = Booth
-MOUDLE_DIR = booth
+TOP_MODULE = Divider
+MOUDLE_DIR = divider
+WIDTH = 32
 
 VERILOG_SRC = $(TOP_MODULE).sv
-CHISEL_SRC = src/main/scala/booth/$(TOP_MODULE).scala
+CHISEL_SRC = src/main/scala/$(MOUDLE_DIR)/$(TOP_MODULE).scala
 # TESTBENCH_SRC = src/test/cxx/main.cxx
 TESTBENCH_SRC = src/test/cxx/$(TOP_MODULE).cxx
 SIM_EXEC = obj_dir/V$(TOP_MODULE)
@@ -14,9 +15,9 @@ VERILATOR_FLAGS = -Wall --cc --trace -Iobj_dir -Wno-UNUSEDSIGNAL
 
 all: $(SIM_EXEC)
 
-$(VERILOG_SRC): $(CHISEL_SRC)
+$(VERILOG_SRC): $(CHISEL_SRC) makefile
 	@echo "Compiling chisel source..."
-	sbt "runMain $(MOUDLE_DIR).$(TOP_MODULE)"
+	sbt "runMain $(MOUDLE_DIR).$(TOP_MODULE) $(WIDTH)"
 
 $(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC)
 	@echo "Compiling Verilog source..."
@@ -27,13 +28,13 @@ $(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC)
 # 生成 vcd 文件, 并用 dwfv 运行 cargo install dwfv
 .PHONY:
 run: $(SIM_EXEC)
-	@./$(SIM_EXEC)
+	@./$(SIM_EXEC) $(WIDTH)
 
 .PHONY:
 sim: run
 	dwfv $(TOP_MODULE).vcd
 	
 clean:
-	rm -rf obj_dir $(TOP_MODULE).vcd
+	rm -rf obj_dir $(TOP_MODULE).vcd $(VERILOG_SRC)
 
 .PHONY: all run clean

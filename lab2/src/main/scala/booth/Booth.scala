@@ -118,7 +118,6 @@ class Booth(val width: Int) extends Module {
 
 import _root_.circt.stage.ChiselStage
 
-*/
 object Booth extends App {
   val width = if (args.length > 0) args(0).toInt else 8 // 默认值为8
   ChiselStage.emitSystemVerilogFile(
