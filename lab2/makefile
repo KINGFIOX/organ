@@ -1,11 +1,11 @@
 # 需要修改的配置
 TOP_MODULE = Booth
-MOUDLE_DIR = booth
+MODULE_DIR = booth
 WIDTH = 8
 
 # 这些不建议修改
 VERILOG_SRC = $(TOP_MODULE).sv
-CHISEL_SRC = src/main/scala/$(MOUDLE_DIR)/$(TOP_MODULE).scala
+CHISEL_SRC = src/main/scala/$(MODULE_DIR)/$(TOP_MODULE).scala
 # TESTBENCH_SRC = src/test/cxx/main.cxx
 TESTBENCH_SRC = src/test/cxx/$(TOP_MODULE).cxx
 SIM_EXEC = obj_dir/V$(TOP_MODULE)
@@ -18,7 +18,7 @@ all: $(SIM_EXEC)
 
 $(VERILOG_SRC): $(CHISEL_SRC) makefile
 	@echo "Compiling chisel source..."
-	sbt "runMain $(MOUDLE_DIR).$(TOP_MODULE) $(WIDTH)"
+	sbt "runMain $(MODULE_DIR).$(TOP_MODULE) $(WIDTH)"
 
 $(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC) makefile
 	@echo "Compiling Verilog source..."

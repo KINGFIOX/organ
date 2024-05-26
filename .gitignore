@@ -4,3 +4,7 @@
 *.docx
 archive
 target
+build
+obj_dir
+project
+report
