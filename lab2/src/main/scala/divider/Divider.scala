@@ -57,6 +57,7 @@ class Divider(_width: Int) extends Module {
         // 0000 1101
         val abs_x = io.x(width - 1, 0)
         val extend_x = Cat(0.U(width.W), abs_x) // 2 * width
+        busy := true.B
 
         /* ---------- 计算 ---------- */
 

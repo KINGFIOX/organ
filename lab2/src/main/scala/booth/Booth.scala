@@ -35,7 +35,7 @@ class Booth(val width: Int) extends Module {
         val _q = Cat(io.y(0), 0.U(1.W))
         switch(_q) {
           is("b00".U, "b11".U) {
-            val __z = Cat(0.U(width.W), io.y)
+            val __z = Cat(0.U(width.W), 0.U(width.W))
             val __z_sign = __z(2 * width - 1)
             _z := /* (_z.asSInt >> 1).asUInt */ Cat(
               __z_sign,
@@ -44,7 +44,7 @@ class Booth(val width: Int) extends Module {
           }
           is("b01".U) {
             // _z := (Cat(io.x, io.y).asSInt >> 1).asUInt
-            val __z = Cat(io.x, io.y)
+            val __z = Cat(io.x, 0.U(width.W))
             val __z_sign = __z(2 * width - 1)
             _z := /* (_z.asSInt >> 1).asUInt */ Cat(
               __z_sign,
@@ -53,7 +53,7 @@ class Booth(val width: Int) extends Module {
           }
           is("b10".U) {
             // _z := (Cat(-io.x, io.y).asSInt >> 1).asUInt
-            val __z = Cat(-io.x, io.y)
+            val __z = Cat(-io.x, 0.U(width.W))
             val __z_sign = __z(2 * width - 1)
             _z := /* (_z.asSInt >> 1).asUInt */ Cat(
               __z_sign,

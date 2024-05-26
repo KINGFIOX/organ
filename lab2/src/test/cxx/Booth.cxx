@@ -2,17 +2,14 @@
 #include "verilated.h"
 #include "verilated_vcd_c.h"
 
+#include <cstdlib>
 #include <iostream>
 
 #include "inc.h"
 
-#ifndef WIDTH
-#define WIDTH 8 // 默认值
-#endif
+#if 0
 
-#if 1
-
-int main(int argc, char** argv)
+int main(int argc, char* argv[])
 {
     Verilated::commandArgs(argc, argv);
 
@@ -20,8 +17,8 @@ int main(int argc, char** argv)
 
     size_t success_cnt = 0;
 
-    for (int8_t x = -128; x != 127; x++) {
-        for (int8_t y = -128; y != 127; y++) {
+    for (int8_t x = LIMIT_MIN; x != LIMIT_MAX; x++) {
+        for (int8_t y = LIMIT_MIN; y != LIMIT_MAX; y++) {
 
             auto dut = std::make_unique<VBooth>();
 
@@ -106,7 +103,11 @@ int main(int argc, char** argv)
     }
     dut->reset = 0;
 
-    int4_t x { 0b1000 }, y { 0b0101 };
+    srand(time(NULL));
+    int8_t x = rand();
+    int8_t y = rand();
+
+    // int4_t x { 0b1000 }, y { 0b0101 };
     // int8_t x = 0b1000; // -8
     // int8_t y = 0b1010; // -6
 
@@ -130,18 +131,18 @@ int main(int argc, char** argv)
     }
 
     // 收集结果和清理
-    int8_t top_z = dut->io_z;
+    int16_t top_z = dut->io_z;
 
     dut->final();
     vcd->close(); // 关闭VCD文件
 
-    if (int8_t z = x * y; z == top_z) {
+    if (int16_t z = x * y; z == top_z) {
         success_cnt++;
     } else {
         fail_cnt++;
         std::cout << "---------- ----------" << std::endl;
-        std::cout << "x: " << x << std::endl;
-        std::cout << "y: " << y << std::endl;
+        std::cout << "x: " << (int)x << std::endl;
+        std::cout << "y: " << (int)y << std::endl;
         std::cout << "x*y: " << (int)z << std::endl;
         std::cout << "mul: " << (int)top_z << std::endl;
         std::cout << "x*y:\t\t" << std::bitset<WIDTH * 2>(z).to_string() << std::endl;

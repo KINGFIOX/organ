@@ -1,8 +1,9 @@
 # 需要修改的配置
-TOP_MODULE = Divider
-MOUDLE_DIR = divider
-WIDTH = 32
+TOP_MODULE = Booth
+MOUDLE_DIR = booth
+WIDTH = 8
 
+# 这些不建议修改
 VERILOG_SRC = $(TOP_MODULE).sv
 CHISEL_SRC = src/main/scala/$(MOUDLE_DIR)/$(TOP_MODULE).scala
 # TESTBENCH_SRC = src/test/cxx/main.cxx
@@ -19,7 +20,7 @@ $(VERILOG_SRC): $(CHISEL_SRC) makefile
 	@echo "Compiling chisel source..."
 	sbt "runMain $(MOUDLE_DIR).$(TOP_MODULE) $(WIDTH)"
 
-$(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC)
+$(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC) makefile
 	@echo "Compiling Verilog source..."
 	$(VERILATOR) $(VERILATOR_FLAGS) $(VERILOG_SRC) --exe $(TESTBENCH_SRC) 
 	@echo "Building C++ simulation model..."

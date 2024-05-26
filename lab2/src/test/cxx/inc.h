@@ -1,3 +1,13 @@
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#ifndef WIDTH
+#define WIDTH 8 // 默认值
+#endif
+
+#define LIMIT_MIN (-(1 << (WIDTH - 1)))
+#define LIMIT_MAX (~LIMIT_MIN)
+
 /**
  * @brief 补码 -> 原码
  *

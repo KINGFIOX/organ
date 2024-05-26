@@ -1,8 +1,8 @@
 add_requires("verilator")
 
-local TOP_MODULE = "Divider"
-local MOUDLE_DIR = "divider"
-local WIDTH = "32"
+local TOP_MODULE = "Booth"
+local MOUDLE_DIR = "booth"
+local WIDTH = "8"
 
 target("V" .. TOP_MODULE)
     add_rules("verilator.binary")

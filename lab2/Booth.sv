@@ -64,7 +64,7 @@ module Booth(
         busy <= io_start | busy;
         if (io_start) begin
           automatic logic [7:0] __z_T_1 = 8'h0 - io_x;
-          _z <= {io_y[0] ? {__z_T_1[7], __z_T_1} : 9'h0, io_y[7:1]};
+          _z <= io_y[0] ? {__z_T_1[7], __z_T_1, 7'h0} : 16'h0;
         end
       end
       if (~state & io_start) begin
