@@ -10,6 +10,10 @@
 4.  `sdk install scala 2.12.13`
 5.  verilator 推荐编译安装
 
+## report
+
+这里主要存放了实验报告
+
 ## xmake
 
 尽管这个项目有一个 xmake, 但是 xmake 没啥用，只是服务于 lsp 的，
