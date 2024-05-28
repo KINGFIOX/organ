@@ -8,34 +8,20 @@ VERILOG_SRC = $(TOP_MODULE).sv
 CHISEL_SRC = src/main/scala/$(MODULE_DIR)/$(TOP_MODULE).scala
 # TESTBENCH_SRC = src/test/cxx/main.cxx
 TESTBENCH_SRC = src/test/cxx/$(TOP_MODULE).cxx
-SIM_EXEC = obj_dir/V$(TOP_MODULE)
-
-# Makefile for Verilator simulation
-VERILATOR = verilator
-VERILATOR_FLAGS = -Wall --cc --trace -Iobj_dir -Wno-UNUSEDSIGNAL  -CFLAGS "-DWIDTH=$(WIDTH)"
+SIM_EXEC = build/$(TOP_MODULE)
+CMAKE = cmake
 
 all: $(SIM_EXEC)
 
-$(VERILOG_SRC): $(CHISEL_SRC) makefile
+$(VERILOG_SRC): $(CHISEL_SRC)
 	@echo "Compiling chisel source..."
 	sbt "runMain $(MODULE_DIR).$(TOP_MODULE) $(WIDTH)"
 
 $(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC) makefile
-	@echo "Compiling Verilog source..."
-	$(VERILATOR) $(VERILATOR_FLAGS) $(VERILOG_SRC) --exe $(TESTBENCH_SRC) 
-	@echo "Building C++ simulation model..."
-	$(MAKE) -C obj_dir -f V$(TOP_MODULE).mk
+	TOP_MODULE=$(TOP_MODULE) MODULE_DIR=$(MODULE_DIR) $(CMAKE) -GNinja -S . -B build
+	$(CMAKE) --build build
 
-# 生成 vcd 文件, 并用 dwfv 运行 cargo install dwfv
-.PHONY:
-run: $(SIM_EXEC)
-	@./$(SIM_EXEC)
-
-.PHONY:
-sim: run
-	dwfv $(TOP_MODULE).vcd
-	
 clean:
-	rm -rf obj_dir $(TOP_MODULE).vcd $(VERILOG_SRC)
+	rm -rf build *.vcd *.sv
 
-.PHONY: all run clean
+.PHONY: all clean

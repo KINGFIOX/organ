@@ -1,6 +1,8 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <ostream>
+
 #ifndef WIDTH
 #define WIDTH 8 // 默认值
 #endif
