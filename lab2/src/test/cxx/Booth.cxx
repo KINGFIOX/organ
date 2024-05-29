@@ -7,7 +7,7 @@
 
 #include "inc.h"
 
-#if 0
+#if 1
 
 int main(int argc, char* argv[])
 {
@@ -17,8 +17,11 @@ int main(int argc, char* argv[])
 
     size_t success_cnt = 0;
 
-    for (int8_t x = LIMIT_MIN; x != LIMIT_MAX; x++) {
-        for (int8_t y = LIMIT_MIN; y != LIMIT_MAX; y++) {
+    for (int _x = LIMIT_MIN; _x <= LIMIT_MAX; _x++) {
+        for (int _y = LIMIT_MIN; _y <= LIMIT_MAX; _y++) {
+
+            int8_t x = (int8_t)x;
+            int8_t y = (int8_t)y;
 
             auto dut = std::make_unique<VBooth>();
 
@@ -56,6 +59,7 @@ int main(int argc, char* argv[])
 
             if (int16_t z = x * y; z == top_z) {
                 success_cnt++;
+                std::cout << success_cnt << std::endl;
             } else {
                 fail_cnt++;
                 std::cout << "---------- ----------" << std::endl;

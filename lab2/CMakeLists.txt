@@ -26,5 +26,5 @@ target_compile_features(${TOP_MODULE} PUBLIC cxx_std_20)
 # COVERAGE 覆盖率统计
 verilate(${TOP_MODULE} COVERAGE TRACE
   INCLUDE_DIRS "./src/test/cxx"
-  VERILATOR_ARGS -Wall -Wno-UNUSEDSIGNAL
+  VERILATOR_ARGS -Wall -Wno-UNUSEDSIGNAL -O3
   SOURCES "$ENV{TOP_MODULE}.sv")

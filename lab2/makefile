@@ -21,6 +21,9 @@ $(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC) makefile
 	TOP_MODULE=$(TOP_MODULE) MODULE_DIR=$(MODULE_DIR) $(CMAKE) -GNinja -S . -B build
 	$(CMAKE) --build build
 
+run: $(SIM_EXEC)
+	./$(SIM_EXEC)
+
 clean:
 	rm -rf build *.vcd *.sv
 
