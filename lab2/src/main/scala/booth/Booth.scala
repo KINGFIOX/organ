@@ -63,10 +63,10 @@ class Booth(val width: Int) extends Module {
     is(sCompute) {
       when(cnt.inc()) { // Increment the counter and check if it has reached its maximum
 
-        // 很奇怪
-        when(_x === Cat(1.U(1.W), 0.U((width - 1).W))) {
-          _z := -_z
-        }
+        // // 很奇怪
+        // when(_x === Cat(1.U(1.W), 0.U((width - 1).W))) {
+        //   _z := -_z
+        // }
 
         /* ---------- 状态 ---------- */
         state := sIdle

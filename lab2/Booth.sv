@@ -3,57 +3,55 @@ module Booth(
   input         clock,
                 reset,
                 io_start,
-  input  [7:0]  io_x,
+  input  [31:0] io_x,
                 io_y,
-  output [15:0] io_z,
+  output [63:0] io_z,
   output        io_busy
 );
 
   reg        state;
   reg        busy;
-  reg [7:0]  _x;
-  reg [7:0]  _y;
-  reg [15:0] _z;
-  reg [2:0]  cnt_value;
+  reg [31:0] _x;
+  reg [31:0] _y;
+  reg [63:0] _z;
+  reg [4:0]  cnt_value;
   always @(posedge clock) begin
     if (reset) begin
       state <= 1'h0;
       busy <= 1'h0;
-      _x <= 8'h0;
-      _y <= 8'h0;
-      _z <= 16'h0;
-      cnt_value <= 3'h0;
+      _x <= 32'h0;
+      _y <= 32'h0;
+      _z <= 64'h0;
+      cnt_value <= 5'h0;
     end
     else begin
       if (state) begin
-        automatic logic [2:0] _q_T_1;
-        _q_T_1 = cnt_value + 3'h1;
+        automatic logic [4:0] _q_T_1;
+        _q_T_1 = cnt_value + 5'h1;
         state <= ~(&cnt_value);
         busy <= ~(&cnt_value);
-        if (&cnt_value) begin
-          if (_x == 8'h80)
-            _z <= 16'h0 - _z;
+        if (~state | (&cnt_value)) begin
         end
         else begin
-          automatic logic [7:0] _q_T_5 = _y >> cnt_value;
-          automatic logic [7:0] _q_T_3;
-          automatic logic [1:0] _q_1;
+          automatic logic [31:0] _q_T_5 = _y >> cnt_value;
+          automatic logic [31:0] _q_T_3;
+          automatic logic [1:0]  _q_1;
           _q_T_3 = _y >> _q_T_1;
           _q_1 = {_q_T_3[0], _q_T_5[0]};
           if (_q_1 == 2'h0 | (&_q_1))
-            _z <= {_z[15], _z[15:1]};
+            _z <= {_z[63], _z[63:1]};
           else begin
-            automatic logic [15:0] _GEN;
-            _GEN = {_x, 8'h0};
+            automatic logic [63:0] _GEN;
+            _GEN = {_x, 32'h0};
             if (_q_1 == 2'h1) begin
-              automatic logic [15:0] __z_T_3;
+              automatic logic [63:0] __z_T_3;
               __z_T_3 = _z + _GEN;
-              _z <= {__z_T_3[15], __z_T_3[15:1]};
+              _z <= {__z_T_3[63], __z_T_3[63:1]};
             end
             else if (_q_1 == 2'h2) begin
-              automatic logic [15:0] __z_T_5;
+              automatic logic [63:0] __z_T_5;
               __z_T_5 = _z - _GEN;
-              _z <= {__z_T_5[15], __z_T_5[15:1]};
+              _z <= {__z_T_5[63], __z_T_5[63:1]};
             end
           end
         end
@@ -63,8 +61,8 @@ module Booth(
         state <= io_start | state;
         busy <= io_start | busy;
         if (io_start) begin
-          automatic logic [7:0] __z_T_1 = 8'h0 - io_x;
-          _z <= io_y[0] ? {__z_T_1[7], __z_T_1, 7'h0} : 16'h0;
+          automatic logic [31:0] __z_T_1 = 32'h0 - io_x;
+          _z <= io_y[0] ? {__z_T_1[31], __z_T_1, 31'h0} : 64'h0;
         end
       end
       if (~state & io_start) begin
