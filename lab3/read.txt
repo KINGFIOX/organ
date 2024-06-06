@@ -1,0 +1,79 @@
+  /* ---------- ---------- 读 ---------- ---------- */
+  val sIdle_r :: sTAG_CHECK_r :: sDIRTY_CHECK_r :: sWRITE_BACKn_r :: sREFILL_r :: Nil = Enum(5)
+  val state_r                                                                         = RegInit(sIdle_r)
+
+  val cnt_r = Counter(Constants.CacheLine_Len)
+
+  io.hit_r := (state_r === sIdle_r) && (RegNext(state_r) === sTAG_CHECK_r) && (RegNext(RegNext(state_r)) =/= sREFILL_r)
+
+  switch(state_r) {
+    is(sIdle_r) {
+      when(!peripheral && io.data_ren =/= 0.U) {
+        /* ---------- 读取 ---------- */
+        tagSram.io.addra := index
+        U_dsram.io.addra := index
+        /* ---------- 状态 ---------- */
+        state_r := sTAG_CHECK_r
+      }
+    }
+    is(sTAG_CHECK_r) {
+      when(tagSram.io.douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) {
+        /* ---------- hit ---------- */
+        io.data_rdata := dataOutVec(offset)
+        io.data_valid := true.B
+        /* ---------- 状态 --------- */
+        state_r := sIdle_r
+      }.otherwise {
+        /* ---------- 状态 ---------- */
+        state_r := sDIRTY_CHECK_r
+      }
+    }
+    is(sDIRTY_CHECK_r) {
+      val dirty = tagSram.io.douta(Constants.Tag_Width + 1)
+      when(dirty === 1.U) { // FIXME 脏数据
+        val ofst      = 0.U(Constants.Tag_Width.W)
+        val tag_sram  = tagSram.io.douta(Constants.Tag_Width - 1, 0)
+        val addr_sram = Cat(tag_sram, index, ofst)
+        val data      = dataOutVec(ofst)
+        when(io.dev_wrdy) {
+          io.dev_wen   := "b1111".U(4.W)
+          io.dev_waddr := addr_sram
+          io.dev_wdata := data
+        }
+        state_r := sWRITE_BACKn_r
+      }
+    }
+    is(sWRITE_BACKn_r) {
+      when(cnt_r.inc()) {
+        /* ---------- 访存 ---------- */
+        io.dev_ren   := "b1111".U(4.W) // 0b1111
+        io.dev_raddr := io.data_addr
+        /* ---------- 状态 ---------- */
+        state_r := sREFILL_r
+      }.otherwise {
+        state_r := sWRITE_BACKn_r
+        val ofst      = cnt_r.value(Constants.Tag_Width - 1, 0)
+        val tag_sram  = tagSram.io.douta(Constants.Tag_Width - 1, 0)
+        val addr_sram = Cat(tag_sram, index, ofst)
+        val data      = dataOutVec(ofst)
+        when(io.dev_wrdy) {
+          io.dev_wen   := "b1111".U(4.W)
+          io.dev_waddr := addr_sram
+          io.dev_wdata := data
+        }
+        state_r := sWRITE_BACKn_r
+      }
+    }
+    is(sREFILL_r) {
+      /* ---------- refill cache ---------- */
+      tagSram.io.wea   := true.B
+      tagSram.io.addra := index
+      // dirty=0 + valid=1 + tag
+      tagSram.io.dina  := Cat(0.U((Constants.CacheLine_Width - Constants.Tag_Width - 2).W), 0.U, 1.U, tag)
+      U_dsram.io.wea   := true.B
+      U_dsram.io.addra := index
+      U_dsram.io.dina  := io.dev_rdata
+      /* ---------- 状态 ---------- */
+      state_r := sTAG_CHECK_r
+    }
+  }

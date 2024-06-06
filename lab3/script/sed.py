@@ -20,6 +20,6 @@ def process_file(input_file, output_file):
     print(f"Processed file saved as '{output_file}'")
 
 # 脚本使用示例
-input_filename = 'ICache.sv'  # 指定输入文件的路径
-output_filename = 'verilog/ICache.sv'  # 指定输出文件的路径
+input_filename = 'DCache.sv'  # 指定输入文件的路径
+output_filename = 'verilog/DCache.sv'  # 指定输出文件的路径
 process_file(input_filename, output_filename)

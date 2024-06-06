@@ -30,6 +30,11 @@ module DCache(
     // Peripherals access should be uncached.
     wire uncached = (data_addr[31:16] == 16'hFFFF) & (data_ren != 4'h0 | data_wen != 4'h0) ? 1'b1 : 1'b0;
 
+
+
+    wire hit_r = 0;        // 读命中
+    wire hit_w = 0;        // 写命中
+
     localparam R_IDLE  = 2'b00;
     localparam R_STAT0 = 2'b01;
     localparam R_STAT1 = 2'b11;
@@ -138,5 +143,6 @@ module DCache(
             endcase
         end
     end
+
 
 endmodule

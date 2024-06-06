@@ -23,32 +23,39 @@ module ICache(
   reg  [1:0]       hit_REG_1;
   reg  [1:0]       hit_REG_2;
   wire             _GEN = state == 2'h1;
-  wire             _GEN_0 = _tagSram_douta[23:0] == inst_addr[31:8] & _tagSram_douta[24];
-  wire [3:0][31:0] _GEN_1 = {{_dataSram_douta[127:96]}, {_dataSram_douta[95:64]}, {_dataSram_douta[63:32]}, {_dataSram_douta[31:0]}};
+  wire             _GEN_0 = _tagSram_douta[24:0] == {1'h1, inst_addr[31:8]};
+  wire [3:0][31:0] _GEN_1 =
+    {{_dataSram_douta[127:96]},
+     {_dataSram_douta[95:64]},
+     {_dataSram_douta[63:32]},
+     {_dataSram_douta[31:0]}};
   wire             _GEN_2 = state == 2'h2;
-  wire             _GEN_3 = mem_rvalid & mem_rrdy;
-  wire             _GEN_4 = ~(~(|state) | _GEN) & _GEN_2 & _GEN_3;
+  wire             _GEN_3 = ~(~(|state) | _GEN) & _GEN_2 & mem_rvalid;
   always @(posedge cpu_clk) begin
-    if (cpu_rst) state <= 2'h0;
+    if (cpu_rst)
+      state <= 2'h0;
     else if (|state) begin
-      if (_GEN) state <= {~_GEN_0, 1'h0};
-      else if (_GEN_2 & _GEN_3) state <= 2'h1;
+      if (_GEN)
+        state <= {~_GEN_0, 1'h0};
+      else if (_GEN_2 & mem_rvalid)
+        state <= 2'h1;
     end
-    else if (inst_rreq) state <= 2'h1;
+    else if (inst_rreq)
+      state <= 2'h1;
     hit_REG <= state;
     hit_REG_1 <= state;
     hit_REG_2 <= hit_REG_1;
   end // always @(posedge)
   blk_mem_gen_1 tagSram (
     .clka  (cpu_clk),
-    .wea   (_GEN_4),
+    .wea   (_GEN_3),
     .addra (inst_addr[7:2]),
     .dina  ({104'h1, inst_addr[31:8]}),
     .douta (_tagSram_douta)
   );
   blk_mem_gen_1 dataSram (
     .clka  (cpu_clk),
-    .wea   (_GEN_4),
+    .wea   (_GEN_3),
     .addra (inst_addr[7:2]),
     .dina  (mem_rdata),
     .douta (_dataSram_douta)

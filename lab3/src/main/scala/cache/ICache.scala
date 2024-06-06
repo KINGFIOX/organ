@@ -1,3 +1,5 @@
+package cache
+
 import chisel3._
 import chisel3.util._
 
@@ -69,7 +71,7 @@ class ICache extends Module {
     }
     is(sTAG_CHECK) {
       // tag 命中，并且 valid 位为 1
-      when(tagSram.io.douta(Constants.Tag_Width - 1, 0) === tag && tagSram.io.douta(Constants.Tag_Width) === 1.U) {
+      when(tagSram.io.douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) {
         /* ---------- hit ---------- */
         io.inst_out   := dataOutVec(offset)
         io.inst_valid := true.B
@@ -84,8 +86,7 @@ class ICache extends Module {
       }
     }
     is(sREFILL) {
-      /* ---------- miss ---------- */
-      when(io.mem_rvalid && io.mem_rrdy) {
+      when(io.mem_rvalid /* io.mem_rrdy */ ) {
         /* ---------- 写入 ---------- */
         tagSram.io.wea    := true.B
         tagSram.io.addra  := index

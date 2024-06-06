@@ -14,14 +14,14 @@ all: $(SIM_EXEC)
 
 $(VERILOG_SRC): $(CHISEL_SRC)
 	@echo "Compiling chisel source..."
-	sbt "runMain $(TOP_MODULE)"
+	sbt "runMain $(MODULE_DIR).$(TOP_MODULE)"
 
-$(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC) makefile
-	TOP_MODULE=$(TOP_MODULE) MODULE_DIR=$(MODULE_DIR) $(CMAKE) -GNinja -S . -B build
-	$(CMAKE) --build build
+# $(SIM_EXEC): $(VERILOG_SRC) $(TESTBENCH_SRC) makefile
+# 	TOP_MODULE=$(TOP_MODULE) MODULE_DIR=$(MODULE_DIR) $(CMAKE) -GNinja -S . -B build
+# 	$(CMAKE) --build build
 
-run: $(SIM_EXEC)
-	./$(SIM_EXEC)
+# run: $(SIM_EXEC)
+# 	./$(SIM_EXEC)
 
 clean:
 	rm -rf build *.vcd *.sv

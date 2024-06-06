@@ -12,7 +12,8 @@ module ICache(
   output [31:0]  io_mem_raddr,
   input  [127:0] io_mem_rdata,
   input          io_mem_rrdy,
-                 io_mem_rvalid
+                 io_mem_rvalid,
+  output         io_hit
 );
 
   wire [127:0]     _dataSram_douta;
@@ -22,33 +23,39 @@ module ICache(
   reg  [1:0]       io_hit_REG_1;
   reg  [1:0]       io_hit_REG_2;
   wire             _GEN = state == 2'h1;
-  wire             _GEN_0 = _tagSram_douta[23:0] == io_inst_addr[31:8] & _tagSram_douta[24];
-  // dataOutVec
-  wire [3:0][31:0] _GEN_1 = {{_dataSram_douta[127:96]}, {_dataSram_douta[95:64]}, {_dataSram_douta[63:32]}, {_dataSram_douta[31:0]}};
+  wire             _GEN_0 = _tagSram_douta[24:0] == {1'h1, io_inst_addr[31:8]};
+  wire [3:0][31:0] _GEN_1 =
+    {{_dataSram_douta[127:96]},
+     {_dataSram_douta[95:64]},
+     {_dataSram_douta[63:32]},
+     {_dataSram_douta[31:0]}};
   wire             _GEN_2 = state == 2'h2;
-  wire             _GEN_3 = io_mem_rvalid & io_mem_rrdy;
-  wire             _GEN_4 = ~(~(|state) | _GEN) & _GEN_2 & _GEN_3;
+  wire             _GEN_3 = ~(~(|state) | _GEN) & _GEN_2 & io_mem_rvalid;
   always @(posedge clock) begin
-    if (reset) state <= 2'h0;
+    if (reset)
+      state <= 2'h0;
     else if (|state) begin
-      if (_GEN) state <= {~_GEN_0, 1'h0};
-      else if (_GEN_2 & _GEN_3) state <= 2'h1;
+      if (_GEN)
+        state <= {~_GEN_0, 1'h0};
+      else if (_GEN_2 & io_mem_rvalid)
+        state <= 2'h1;
     end
-    else if (io_inst_rreq) state <= 2'h1;
+    else if (io_inst_rreq)
+      state <= 2'h1;
     io_hit_REG <= state;
     io_hit_REG_1 <= state;
     io_hit_REG_2 <= io_hit_REG_1;
   end // always @(posedge)
   blk_mem_gen_1 tagSram (
     .clka  (clock),
-    .wea   (_GEN_4),
+    .wea   (_GEN_3),
     .addra (io_inst_addr[7:2]),
     .dina  ({104'h1, io_inst_addr[31:8]}),
     .douta (_tagSram_douta)
   );
   blk_mem_gen_1 dataSram (
     .clka  (clock),
-    .wea   (_GEN_4),
+    .wea   (_GEN_3),
     .addra (io_inst_addr[7:2]),
     .dina  (io_mem_rdata),
     .douta (_dataSram_douta)
@@ -57,6 +64,6 @@ module ICache(
   assign io_inst_out = _GEN_1[io_inst_addr[1:0]];
   assign io_mem_ren = ~(|state) | ~_GEN | _GEN_0 ? 4'h0 : 4'hF;
   assign io_mem_raddr = io_inst_addr;
-  wire io_hit = ~(|state) & io_hit_REG == 2'h1 & io_hit_REG_2 != 2'h2;
+  assign io_hit = ~(|state) & io_hit_REG == 2'h1 & io_hit_REG_2 != 2'h2;
 endmodule
 
