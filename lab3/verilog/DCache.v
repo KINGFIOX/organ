@@ -30,69 +30,6 @@ module DCache(
     // Peripherals access should be uncached.
     wire uncached = (data_addr[31:16] == 16'hFFFF) & (data_ren != 4'h0 | data_wen != 4'h0) ? 1'b1 : 1'b0;
 
-`ifdef ENABLE_DCACHE    /******** 不要修改此行代码 ********/
-
-    wire [?:0] tag_from_cpu   = /* TODO */;    // 主存地址的TAG
-    wire [?:0] offset         = /* TODO */;    // 32位字偏移量
-    wire       valid_bit      = /* TODO */;    // Cache行的有效位
-    wire [?:0] tag_from_cache = /* TODO */;    // Cache行的TAG
-
-    // TODO: 定义DCache读状态机的状态变量
-
-
-    wire hit_r = /* TODO */;        // 读命中
-    wire hit_w = /* TODO */;        // 写命中
-
-    always @(*) begin
-        data_valid = hit_r;
-        data_rdata = /* TODO: 根据字偏移，选择Cache行中的某个32位字输出数据 */; 
-    end
-
-    wire       cache_we     = /* TODO */;     // DCache存储体的写使能信号
-    wire [?:0] cache_index  = /* TODO */;     // 主存地址的Cache索引 / DCache存储体的地址
-    wire [?:0] cache_line_w = /* TODO */;     // 待写入DCache的Cache行
-    wire [?:0] cache_line_r;                  // 从DCache读出的Cache行
-
-    // DCache存储体：Block RAM IP核
-    blk_mem_gen_1 U_dsram (
-        .clka   (cpu_clk),
-        .wea    (cache_we),
-        .addra  (cache_index),
-        .dina   (cache_line_w),
-        .douta  (cache_line_r)
-    );
-
-    // TODO: 编写DCache读状态机现态的更新逻辑
-
-
-    // TODO: 编写DCache读状态机的状态转移逻辑（注意处理uncached访问）
-
-
-    // TODO: 生成DCache读状态机的输出信号
-
-
-
-
-
-    ///////////////////////////////////////////////////////////
-    // TODO: 定义DCache写状态机的状态变量
-
-
-    // TODO: 编写DCache写状态机的现态更新逻辑
-
-
-    // TODO: 编写DCache写状态机的状态转移逻辑（注意处理uncached访问）
-
-
-    // TODO: 生成DCache写状态机的输出信号
-
-
-    // TODO: 写命中时，只需修改Cache行中的其中一个字。请在此实现之。
-
-
-    /******** 不要修改以下代码 ********/
-`else
-
     localparam R_IDLE  = 2'b00;
     localparam R_STAT0 = 2'b01;
     localparam R_STAT1 = 2'b11;
@@ -201,7 +138,5 @@ module DCache(
             endcase
         end
     end
-
-`endif
 
 endmodule

@@ -18,6 +18,8 @@ class ICache extends Module {
     // 握手
     val mem_rrdy   = Input(Bool()) // 主存就绪
     val mem_rvalid = Input(Bool()) // 来自主存的数据有效
+    // hit
+    val hit = Output(Bool())
   })
   /* ---------- ---------- 初始化 output ---------- ---------- */
   io.inst_valid := false.B
@@ -26,14 +28,16 @@ class ICache extends Module {
   io.mem_raddr  := DontCare
 
   /* ---------- ---------- 初始化 sram ---------- ---------- */
-  val tagSram = Module(new SRAM(Constants.Cache_Len, 1 + Constants.Tag_Width))
+  val tagSram = Module(new blk_mem_gen_1)
   tagSram.io.addra := DontCare
   tagSram.io.dina  := DontCare
   tagSram.io.wea   := false.B
-  val dataSram = Module(new SRAM(Constants.Cache_Len, Constants.CacheLine_Width))
+  tagSram.io.clka  := clock
+  val dataSram = Module(new blk_mem_gen_1)
   dataSram.io.addra := DontCare
   dataSram.io.dina  := DontCare
   dataSram.io.wea   := false.B
+  dataSram.io.clka  := clock
 
   /* ---------- ---------- addr 划分 ---------- ---------- */
   // [32-1, 32-20] = [31, 12]
@@ -43,33 +47,36 @@ class ICache extends Module {
   // [1, 0]
   val offset = io.inst_addr(Constants.Offset_Width - 1, 0)
 
-  val sramOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-  sramOutVec := dataSram.io.douta.asTypeOf(sramOutVec)
+  val dataOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+  dataOutVec := dataSram.io.douta.asTypeOf(dataOutVec)
 
   /* ---------- ---------- 状态机 ---------- ---------- */
+  // 0 1 2
   val sIdle :: sTAG_CHECK :: sREFILL :: Nil = Enum(3)
   val state                                 = RegInit(sIdle)
 
-  when(io.inst_rreq) {
-    /* ---------- 读取 ---------- */
-    tagSram.io.addra  := index
-    dataSram.io.addra := index
-    /* ---------- 状态 ---------- */
-    state := sTAG_CHECK
-  }
+  io.hit := (state === sIdle) && (RegNext(state) === sTAG_CHECK) && (RegNext(RegNext(state)) =/= sREFILL)
 
   switch(state) {
-    is(sIdle) { /* 啥也不干 */ }
+    is(sIdle) {
+      when(io.inst_rreq) {
+        /* ---------- 读取 ---------- */
+        tagSram.io.addra  := index
+        dataSram.io.addra := index
+        /* ---------- 状态 ---------- */
+        state := sTAG_CHECK
+      }
+    }
     is(sTAG_CHECK) {
       // tag 命中，并且 valid 位为 1
-      when(tagSram.io.douta === tag && tagSram.io.douta(Constants.Tag_Width) === 1.U) {
+      when(tagSram.io.douta(Constants.Tag_Width - 1, 0) === tag && tagSram.io.douta(Constants.Tag_Width) === 1.U) {
         /* ---------- hit ---------- */
-        io.inst_out   := sramOutVec(offset)
+        io.inst_out   := dataOutVec(offset)
         io.inst_valid := true.B
         /* ---------- 状态 ---------- */
         state := sIdle
       }.otherwise {
-        /* ---------- 访存 ---------- */
+        /* ---------- miss ---------- */
         io.mem_ren   := "b1111".U(4.W) // 0b1111
         io.mem_raddr := io.inst_addr
         /* ---------- 状态 ---------- */
@@ -82,7 +89,7 @@ class ICache extends Module {
         /* ---------- 写入 ---------- */
         tagSram.io.wea    := true.B
         tagSram.io.addra  := index
-        tagSram.io.dina   := Cat(1.U, tag)
+        tagSram.io.dina   := Cat(0.U((Constants.CacheLine_Width - Constants.Tag_Width - 1).W), 1.U, tag)
         dataSram.io.wea   := true.B
         dataSram.io.addra := index
         dataSram.io.dina  := io.mem_rdata

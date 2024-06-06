@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.12)
 cmake_policy(SET CMP0074 NEW)
-cmake_policy(SET CMP0144 NEW)
+# cmake_policy(SET CMP0144 NEW)
 project(Booth)
 
 # 当然啦，这里要修改成你的 VERILATOR_ROOT, 通常是 /usr/local/share/verilator
-set(VERILATOR_ROOT "/usr/local/share/verilator" CACHE STRING "Verilator root directory")
+set(VERILATOR_ROOT "/usr/share/verilator" CACHE STRING "Verilator root directory")
 
 set(TOP_MODULE $ENV{TOP_MODULE})
 set(MODULE_DIR $ENV{MODULE_DIR})
@@ -21,6 +21,7 @@ if (NOT verilator_FOUND)
   message(FATAL_ERROR "Verilator was not found. Either install it, or set the VERILATOR_ROOT environment variable")
 endif()
 
+# message("src/test/cxx/${TOP_MODULE}.cxx")
 add_executable(${TOP_MODULE} "src/test/cxx/${TOP_MODULE}.cxx")
 target_compile_features(${TOP_MODULE} PUBLIC cxx_std_20)
 

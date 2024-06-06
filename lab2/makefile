@@ -1,6 +1,6 @@
 # 需要修改的配置
-TOP_MODULE = Booth
-MODULE_DIR = booth
+TOP_MODULE = Divider
+MODULE_DIR = divider
 WIDTH = 32
 
 # 这些不建议修改

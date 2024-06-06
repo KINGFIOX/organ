@@ -9,9 +9,9 @@ def process_file(input_file, output_file):
     # 删除所有标识符的io_前缀
     text = re.sub(r'\bio_', '', text)
     # 将所有的clock改成clk
-    text = text.replace('clock', 'clk')
+    text = text.replace('clock', 'cpu_clk')
     # 将所有reset改成rst
-    text = text.replace('reset', 'rst')
+    text = text.replace('reset', 'cpu_rst')
 
     # 写入到输出文件
     with open(output_file, 'w') as file:
@@ -20,6 +20,6 @@ def process_file(input_file, output_file):
     print(f"Processed file saved as '{output_file}'")
 
 # 脚本使用示例
-input_filename = 'Divider.sv'  # 指定输入文件的路径
-output_filename = 'verilog/divider.sv'  # 指定输出文件的路径
+input_filename = 'ICache.sv'  # 指定输入文件的路径
+output_filename = 'verilog/ICache.sv'  # 指定输出文件的路径
 process_file(input_filename, output_filename)
