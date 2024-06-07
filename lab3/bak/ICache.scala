@@ -54,63 +54,53 @@ class ICache extends Module {
 
   /* ---------- ---------- 状态机 ---------- ---------- */
   // 0 1 2
-  val sIdle :: sTAG_CHECK :: sREFILL :: sI_S0_mem :: sI_S1_mem :: Nil = Enum(5)
-  val state                                                           = RegInit(sIdle)
+  val sIdle :: sTAG_CHECK :: sREFILL :: Nil = Enum(3)
+  val state                                 = RegInit(sIdle)
 
   io.hit := (state === sIdle) && (RegNext(state) === sTAG_CHECK) && (RegNext(RegNext(state)) === sIdle)
 
   switch(state) {
     is(sIdle) {
-      /* ---------- 状态 ---------- */
-      state := Mux(io.inst_rreq, sTAG_CHECK, sIdle)
+      when(io.inst_rreq) {
+        /* ---------- 读取 ---------- */
+        tagSram.io.addra  := index
+        dataSram.io.addra := index
+        /* ---------- 状态 ---------- */
+        state := sTAG_CHECK
+      }
     }
     is(sTAG_CHECK) {
-      /* ---------- 状态 ---------- */
+      // tag 命中，并且 valid 位为 1
       when(tagSram.io.douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) {
-        io.inst_valid := true.B
+        /* ---------- hit ---------- */
         io.inst_out   := dataOutVec(offset)
-        state         := sIdle
+        io.inst_valid := true.B
+        /* ---------- 状态 ---------- */
+        state := sIdle
       }.otherwise {
-        state := sREFILL
+        /* ---------- miss ---------- */
+        io.mem_raddr := io.inst_addr
+        when(io.mem_rrdy) {
+          io.mem_ren := "b1111".U(4.W) // 0b1111
+          /* ---------- 状态 ---------- */
+          state := sREFILL
+        }
       }
     }
-    is(sREFILL) { /* sIdle */
-      io.mem_raddr := io.inst_addr
-      when(io.mem_rrdy) {
-        io.mem_ren := "b1111".U(4.W)
-        state      := sI_S1_mem
-      }.otherwise {
-        io.mem_ren := 0.U
-        state      := sI_S0_mem
-      }
-    }
-    is(sI_S0_mem) {
-      when(io.mem_rrdy) {
-        io.mem_ren := "b1111".U(4.W)
-        state      := sI_S1_mem
-      }.otherwise {
-        io.mem_ren := 0.U
-        state      := sI_S0_mem
-      }
-      // io.mem_ren := Mux(io.mem_rrdy, "b1111".U(4.W), 0.U)
-      // state      := Mux(io.mem_rrdy, sI_S1_mem, sI_S0_mem)
-    }
-    is(sI_S1_mem) {
-      /* ---------- 状态 ---------- */
-      when(io.mem_rvalid) {
-        state             := sTAG_CHECK
+    is(sREFILL) {
+      when(io.mem_rvalid /* io.mem_rrdy */ ) {
+        /* ---------- 写入 ---------- */
         tagSram.io.wea    := true.B
         tagSram.io.addra  := index
-        tagSram.io.dina   := Cat(1.U, tag)
+        tagSram.io.dina   := Cat(0.U((Constants.CacheLine_Width - Constants.Tag_Width - 1).W), 1.U, tag)
         dataSram.io.wea   := true.B
         dataSram.io.addra := index
         dataSram.io.dina  := io.mem_rdata
-      }.otherwise {
-        state := sI_S1_mem
+        /* ---------- 状态 ---------- */
+        state := sTAG_CHECK
       }
     }
   }
-
 }
 
 import _root_.circt.stage.ChiselStage

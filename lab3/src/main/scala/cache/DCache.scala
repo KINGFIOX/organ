@@ -118,53 +118,53 @@ class DCache extends Module {
     }
   }
 
-  // /* ---------- ---------- write ---------- ---------- */
+  /* ---------- ---------- write ---------- ---------- */
 
-  // val sW_IDLE :: sW_S0 :: sW_S1 :: Nil = Enum(3)
-  // val w_state                          = RegInit(sW_IDLE)
+  val sW_IDLE :: sW_S0 :: sW_S1 :: Nil = Enum(3)
+  val w_state                          = RegInit(sW_IDLE)
 
-  // // 这个 ren_r 是因为：io.data_ren 可能会撤下来
-  // val wen_r   = RegInit(0.U(Constants.CacheLine_Len.W))
-  // val wr_resp = Mux(io.dev_wrdy & (io.dev_wen === 0.U), true.B, false.B)
+  // 这个 ren_r 是因为：io.data_ren 可能会撤下来
+  val wen_r   = RegInit(0.U(Constants.CacheLine_Len.W))
+  val wr_resp = Mux(io.dev_wrdy & (io.dev_wen === 0.U), true.B, false.B)
 
-  // switch(w_state) {
-  //   is(sW_IDLE) {
-  //     w_state := Mux(io.data_wen.orR, Mux(io.dev_wrdy, sW_S1, sW_S0), sW_IDLE)
-  //   }
-  //   is(sW_S0) {
-  //     w_state := Mux(io.dev_wrdy, sW_S1, sW_S0)
-  //   }
-  //   is(sW_S1) {
-  //     w_state := Mux(wr_resp, sW_IDLE, sW_S1)
-  //   }
-  // }
+  switch(w_state) {
+    is(sW_IDLE) {
+      w_state := Mux(io.data_wen.orR, Mux(io.dev_wrdy, sW_S1, sW_S0), sW_IDLE)
+    }
+    is(sW_S0) {
+      w_state := Mux(io.dev_wrdy, sW_S1, sW_S0)
+    }
+    is(sW_S1) {
+      w_state := Mux(wr_resp, sW_IDLE, sW_S1)
+    }
+  }
 
-  // switch(w_state) {
-  //   is(sW_IDLE) {
-  //     io.data_wresp := 0.U
-  //     when(io.data_wen.orR) {
-  //       when(io.dev_rrdy) {
-  //         io.dev_wen := io.data_wen
-  //       }.otherwise {
-  //         wen_r := io.data_wen
-  //       }
-  //       io.dev_waddr := io.data_addr
-  //       io.dev_wdata := io.data_wdata
-  //     }.otherwise {
-  //       io.dev_wen := 0.U
-  //     }
-  //   }
-  //   is(sW_S0) {
-  //     io.dev_wen := Mux(io.dev_wrdy, wen_r, 0.U)
-  //     when(io.dev_rrdy) {
-  //       io.dev_wen := wen_r
-  //     }
-  //   }
-  //   is(sW_S1) {
-  //     io.dev_wen    := 0.U
-  //     io.data_wresp := Mux(wr_resp, true.B, false.B)
-  //   }
-  // }
+  switch(w_state) {
+    is(sW_IDLE) {
+      io.data_wresp := 0.U
+      when(io.data_wen.orR) {
+        when(io.dev_rrdy) {
+          io.dev_wen := io.data_wen
+        }.otherwise {
+          wen_r := io.data_wen
+        }
+        io.dev_waddr := io.data_addr
+        io.dev_wdata := io.data_wdata
+      }.otherwise {
+        io.dev_wen := 0.U
+      }
+    }
+    is(sW_S0) {
+      io.dev_wen := Mux(io.dev_wrdy, wen_r, 0.U)
+      when(io.dev_rrdy) {
+        io.dev_wen := wen_r
+      }
+    }
+    is(sW_S1) {
+      io.dev_wen    := 0.U
+      io.data_wresp := Mux(wr_resp, true.B, false.B)
+    }
+  }
 
   /* ---------- ---------- addr 划分 ---------- ---------- */
   // [32-1, 32-24] = [31, 8]
