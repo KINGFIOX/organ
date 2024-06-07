@@ -59,20 +59,14 @@ module DCache(
             case (r_state)
                 R_IDLE: begin
                     data_valid <= 1'b0;
-
                     if (|data_ren) begin
-                        if (dev_rrdy)
-                            dev_ren <= data_ren;
-                        else
-                            ren_r   <= data_ren;
+                        if (dev_rrdy) dev_ren <= data_ren;
+                        else ren_r   <= data_ren;
 
                         dev_raddr <= data_addr;
-                    end else
-                        dev_ren   <= 4'h0;
+                    end else dev_ren   <= 4'h0;
                 end
-                R_STAT0: begin
-                    dev_ren    <= dev_rrdy ? ren_r : 4'h0;
-                end   
+                R_STAT0: begin dev_ren    <= dev_rrdy ? ren_r : 4'h0; end   
                 R_STAT1: begin
                     dev_ren    <= 4'h0;
                     data_valid <= dev_rvalid ? 1'b1 : 1'b0;

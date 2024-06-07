@@ -74,7 +74,7 @@ class ICache extends Module {
       }
     }
     is(sREFILL) { /* sIdle */
-      io.mem_raddr := ((io.inst_addr >> (Constants.Word_Align + Constants.Offset_Width).U)) << (Constants.Word_Align + Constants.Offset_Width).U
+      io.mem_raddr := Cat(tag, index, 0.U((Constants.Offset_Width + Constants.Word_Align).W))
       when(io.mem_rrdy) {
         io.mem_ren := "b1111".U(4.W)
         state      := sI_S1_mem
@@ -86,8 +86,6 @@ class ICache extends Module {
       when(io.mem_rrdy) {
         io.mem_ren := "b1111".U(4.W)
         state      := sI_S1_mem
-      }.otherwise {
-        state := sI_S0_mem
       }
     }
     is(sI_S1_mem) {
