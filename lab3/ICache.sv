@@ -35,8 +35,12 @@ module ICache(
     if (reset)
       state <= 2'h0;
     else if (|state) begin
-      if (_GEN)
-        state <= {~_GEN_0, 1'h0};
+      if (_GEN) begin
+        if (_GEN_0)
+          state <= 2'h0;
+        else if (io_mem_rrdy)
+          state <= 2'h2;
+      end
       else if (_GEN_2 & io_mem_rvalid)
         state <= 2'h1;
     end
@@ -62,8 +66,8 @@ module ICache(
   );
   assign io_inst_valid = (|state) & _GEN & _GEN_0;
   assign io_inst_out = _GEN_1[io_inst_addr[1:0]];
-  assign io_mem_ren = ~(|state) | ~_GEN | _GEN_0 ? 4'h0 : 4'hF;
+  assign io_mem_ren = ~(|state) | ~_GEN | _GEN_0 ? 4'h0 : {4{io_mem_rrdy}};
   assign io_mem_raddr = io_inst_addr;
-  assign io_hit = ~(|state) & io_hit_REG == 2'h1 & io_hit_REG_2 != 2'h2;
+  assign io_hit = ~(|state) & io_hit_REG == 2'h1 & io_hit_REG_2 == 2'h0;
 endmodule
 

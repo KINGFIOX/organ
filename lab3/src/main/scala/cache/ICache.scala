@@ -57,7 +57,7 @@ class ICache extends Module {
   val sIdle :: sTAG_CHECK :: sREFILL :: Nil = Enum(3)
   val state                                 = RegInit(sIdle)
 
-  io.hit := (state === sIdle) && (RegNext(state) === sTAG_CHECK) && (RegNext(RegNext(state)) =/= sREFILL)
+  io.hit := (state === sIdle) && (RegNext(state) === sTAG_CHECK) && (RegNext(RegNext(state)) === sIdle)
 
   switch(state) {
     is(sIdle) {
@@ -79,10 +79,12 @@ class ICache extends Module {
         state := sIdle
       }.otherwise {
         /* ---------- miss ---------- */
-        io.mem_ren   := "b1111".U(4.W) // 0b1111
         io.mem_raddr := io.inst_addr
-        /* ---------- 状态 ---------- */
-        state := sREFILL
+        when(io.mem_rrdy) {
+          io.mem_ren := "b1111".U(4.W) // 0b1111
+          /* ---------- 状态 ---------- */
+          state := sREFILL
+        }
       }
     }
     is(sREFILL) {
