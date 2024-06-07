@@ -52,7 +52,7 @@ class DCache extends Module {
   io.dev_raddr := 0.U
 
   io.hit_w := 0.U
-  io.hit_r := 0.U
+  io.hit_r := false.B
 
   /* ---------- ---------- 初始化 sram ---------- ---------- */
   // tagSram: dirty + valid + tag
@@ -75,53 +75,112 @@ class DCache extends Module {
   // Peripherals access should be uncached.
   val uncached = Mux((io.data_addr(31, 16) === "hFFFF".U(16.W)) & (io.data_ren =/= 0.U(4.W) | io.data_wen =/= 0.U(4.W)), true.B, false.B)
 
-  val sR_IDLE :: sR_S0 :: sR_S1 :: Nil = Enum(3)
-  val r_state                          = RegInit(sR_IDLE)
+  /* ---------- ---------- addr 划分 ---------- ---------- */
+  // [32-1, 32-24] = [31, 8]
+  val tag = io.data_addr(Constants.Tag_up, Constants.Tag_down)
+  // [32-20-1, 32-24-6] = [7, 2]
+  val index = io.data_addr(Constants.Index_up, Constants.Index_down)
+  // [1, 0]
+  val offset = io.data_addr(Constants.Offset_up, Constants.Offset_down)
+
+  /* ---------- 把 data 转换成向量，方便修改 ---------- */
+
+  val dataOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+  dataOutVec := U_dsram.io.douta.asTypeOf(dataOutVec)
 
   /* ---------- ---------- read ---------- ---------- */
 
-  switch(r_state) {
-    is(sR_IDLE) {
-      r_state := Mux(io.data_ren.orR, Mux(io.dev_rrdy, sR_S0, sR_S1), sR_IDLE)
-    }
-    is(sR_S0) {
-      r_state := Mux(io.dev_rrdy, sR_S1, sR_S0)
-    }
-    is(sR_S1) {
-      r_state := Mux(io.dev_rvalid, sR_IDLE, sR_S1)
-    }
-  }
+  val sR_IDLE :: sR_TAG_CHECK :: sR_REFILL :: sR_S0_refill :: sR_S1_refill :: sR_S0_uncached :: sR_S1_uncached :: Nil = Enum(7)
+  val r_state                                                                                                         = RegInit(sR_IDLE)
 
   // 这个 ren_r 是因为：io.data_ren 可能会撤下来
   val ren_r = RegInit(0.U(Constants.CacheLine_Len.W))
   switch(r_state) {
     is(sR_IDLE) {
-      io.data_valid := 0.U
-      when(io.data_ren.orR) {
-        when(io.dev_rrdy) {
-          io.dev_ren := io.data_ren
-        }.otherwise {
-          ren_r := io.data_ren
+      when(uncached) { /* uncached */
+        when(io.data_ren.orR) {
+          when(io.dev_rrdy) {
+            io.dev_ren := io.data_ren
+            r_state    := sR_S1_uncached
+          }.otherwise {
+            ren_r   := io.data_ren
+            r_state := sR_S0_uncached
+          }
+          io.dev_raddr := io.data_addr
         }
-        io.dev_raddr := io.data_addr
-      }.otherwise {
-        io.dev_ren := 0.U
+      }.otherwise { /* cached */
+        when(io.data_ren.orR) {
+          ren_r   := io.data_ren
+          r_state := sR_TAG_CHECK
+        }
       }
     }
-    is(sR_S0) {
-      io.dev_ren := Mux(io.dev_rrdy, ren_r, 0.U)
+    is(sR_TAG_CHECK) {
+      when(tagSram.io.douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) {
+        io.data_valid := true.B
+        io.data_rdata := dataOutVec(offset)
+        r_state       := sR_IDLE
+        io.hit_r      := true.B
+      }.otherwise {
+        r_state := sR_REFILL
+      }
     }
-    is(sR_S1) {
-      io.dev_ren    := 0.U
-      io.data_valid := Mux(io.dev_rvalid, true.B, false.B)
-      io.data_rdata := Mux(io.dev_rvalid, io.dev_rdata, 0.U)
+    is(sR_REFILL) {
+      io.dev_raddr := io.data_rdata
+      when(io.dev_rrdy) {
+        io.dev_ren := ren_r
+        r_state    := sR_S1_refill
+      }.otherwise {
+        r_state := sR_S0_refill
+      }
+    }
+    is(sR_S0_refill) {
+      when(io.dev_rrdy) {
+        io.dev_ren := ren_r
+        r_state    := sR_S1_refill
+      }.otherwise {
+        r_state := sR_S0_refill
+      }
+    }
+    is(sR_S1_refill) {
+      /* ---------- 状态 ---------- */
+      when(io.dev_rvalid) {
+        r_state          := sR_TAG_CHECK
+        tagSram.io.wea   := true.B
+        tagSram.io.addra := index
+        tagSram.io.dina  := Cat(1.U, tag)
+        U_dsram.io.wea   := true.B
+        U_dsram.io.addra := index
+        U_dsram.io.dina  := io.dev_rdata
+      }.otherwise {
+        r_state := sR_S1_refill
+      }
+    }
+    is(sR_S0_uncached) {
+      when(io.dev_rrdy) {
+        io.dev_ren := ren_r
+        r_state    := sR_S1_uncached
+      }
+      // io.dev_ren := Mux(io.dev_rrdy, ren_r, 0.U)
+      // r_state    := Mux(io.dev_rrdy, sR_S1_uncached, sR_S0_uncached)
+    }
+    is(sR_S1_uncached) {
+      when(io.dev_rvalid) {
+        io.data_valid := io.dev_rdata
+        io.data_rdata := io.dev_rdata
+        r_state       := sR_IDLE
+      }
+      // io.dev_ren := 0.U
+      // // io.data_valid := Mux(io.dev_rvalid, true.B, false.B)
+      // // io.data_rdata := Mux(io.dev_rvalid, io.dev_rdata, 0.U)
+      // // r_state       := Mux(io.dev_rvalid, sR_IDLE, sR_S1_uncached)
     }
   }
 
   /* ---------- ---------- write ---------- ---------- */
 
-  val sW_IDLE :: sW_S0 :: sW_S1 :: Nil = Enum(3)
-  val w_state                          = RegInit(sW_IDLE)
+  val sW_IDLE :: sW_TAG_CHECK :: sW_REFILL :: sW_S0_refill :: sW_S1_refill :: sW_S0_uncached :: sW_S1_uncached :: Nil = Enum(7)
+  val w_state                                                                                                         = RegInit(sW_IDLE)
 
   // 这个 ren_r 是因为：io.data_ren 可能会撤下来
   val wen_r   = RegInit(0.U(Constants.CacheLine_Len.W))
@@ -129,19 +188,6 @@ class DCache extends Module {
 
   switch(w_state) {
     is(sW_IDLE) {
-      w_state := Mux(io.data_wen.orR, Mux(io.dev_wrdy, sW_S1, sW_S0), sW_IDLE)
-    }
-    is(sW_S0) {
-      w_state := Mux(io.dev_wrdy, sW_S1, sW_S0)
-    }
-    is(sW_S1) {
-      w_state := Mux(wr_resp, sW_IDLE, sW_S1)
-    }
-  }
-
-  switch(w_state) {
-    is(sW_IDLE) {
-      io.data_wresp := 0.U
       when(io.data_wen.orR) {
         when(io.dev_rrdy) {
           io.dev_wen := io.data_wen
@@ -153,31 +199,20 @@ class DCache extends Module {
       }.otherwise {
         io.dev_wen := 0.U
       }
+      w_state := Mux(io.data_wen.orR, Mux(io.dev_wrdy, sW_S1_uncached, sW_S0_uncached), sW_IDLE)
     }
-    is(sW_S0) {
+    is(sW_S0_uncached) {
       io.dev_wen := Mux(io.dev_wrdy, wen_r, 0.U)
       when(io.dev_rrdy) {
         io.dev_wen := wen_r
       }
+      w_state := Mux(io.dev_wrdy, sW_S1_uncached, sW_S0_uncached)
     }
-    is(sW_S1) {
-      io.dev_wen    := 0.U
+    is(sW_S1_uncached) {
       io.data_wresp := Mux(wr_resp, true.B, false.B)
+      w_state       := Mux(wr_resp, sW_IDLE, sW_S1_uncached)
     }
   }
-
-  /* ---------- ---------- addr 划分 ---------- ---------- */
-  // [32-1, 32-24] = [31, 8]
-  val tag = io.data_addr(Constants.Addr_Width - 1, Constants.Addr_Width - Constants.Tag_Width)
-  // [32-20-1, 32-24-6] = [7, 2]
-  val index = io.data_addr(Constants.Addr_Width - Constants.Tag_Width - 1, Constants.Offset_Width)
-  // [1, 0]
-  val offset = io.data_addr(Constants.Offset_Width - 1, 0)
-
-  /* ---------- 把 data 转换成向量，方便修改 ---------- */
-
-  val dataOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-  dataOutVec := U_dsram.io.douta.asTypeOf(dataOutVec)
 
 }
 

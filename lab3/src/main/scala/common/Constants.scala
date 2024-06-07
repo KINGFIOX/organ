@@ -11,6 +11,18 @@ object Constants {
 
   def CacheLine_Width = CacheLine_Len * Word_Width // 一个 cacheline 的 width 4 * 32 = 128
   def Cache_Len       = (1 << Index_Width) // 有 64 个 cacheline
-  def Offset_Width    = log2Floor(CacheLine_Len) // 偏移量 2
-  def Tag_Width       = Addr_Width - Offset_Width - Index_Width // tag 的长度 32 - 2 - 6 = 24
+
+  def Word_Bytes   = Word_Width / 8 // 4
+  def Word_Align   = log2Floor(Word_Bytes) // 2
+  def Offset_up    = Word_Align + Offset_Width - 1 // 3
+  def Offset_down  = Word_Align // 2
+  def Offset_Width = log2Floor(CacheLine_Len) // 偏移量 2
+
+  def Index_up   = Offset_up + Index_Width - 1 // 9
+  def Index_down = Offset_up + 1 // 4
+
+  def Tag_up    = Addr_Width - 1 // 31
+  def Tag_down  = Index_up + 1 // 10
+  def Tag_Width = Tag_up - Tag_down + 1 // 22
+
 }

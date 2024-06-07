@@ -5,6 +5,7 @@ import chisel3.util._
 
 import common.Constants
 import memory._
+import scala.collection.immutable.Stream.Cons
 
 class ICache extends Module {
   val io = IO(new Bundle {
@@ -28,6 +29,7 @@ class ICache extends Module {
   io.inst_out   := DontCare
   io.mem_ren    := 0.U
   io.mem_raddr  := DontCare
+  io.hit        := false.B
 
   /* ---------- ---------- 初始化 sram ---------- ---------- */
   val tagSram = Module(new blk_mem_gen_1)
@@ -42,12 +44,9 @@ class ICache extends Module {
   dataSram.io.clka  := clock
 
   /* ---------- ---------- addr 划分 ---------- ---------- */
-  // [32-1, 32-20] = [31, 12]
-  val tag = io.inst_addr(Constants.Addr_Width - 1, Constants.Addr_Width - Constants.Tag_Width)
-  // [32-20-1, 32-20-10] = [11, 2]
-  val index = io.inst_addr(Constants.Addr_Width - Constants.Tag_Width - 1, Constants.Offset_Width)
-  // [1, 0]
-  val offset = io.inst_addr(Constants.Offset_Width - 1, 0)
+  val tag    = io.inst_addr(Constants.Tag_up, Constants.Tag_down)
+  val index  = io.inst_addr(Constants.Index_up, Constants.Index_down)
+  val offset = io.inst_addr(Constants.Offset_up, Constants.Offset_down)
 
   val dataOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
   dataOutVec := dataSram.io.douta.asTypeOf(dataOutVec)
@@ -57,31 +56,30 @@ class ICache extends Module {
   val sIdle :: sTAG_CHECK :: sREFILL :: sI_S0_mem :: sI_S1_mem :: Nil = Enum(5)
   val state                                                           = RegInit(sIdle)
 
-  io.hit := (state === sIdle) && (RegNext(state) === sTAG_CHECK) && (RegNext(RegNext(state)) === sIdle)
-
   switch(state) {
     is(sIdle) {
       /* ---------- 状态 ---------- */
-      state := Mux(io.inst_rreq, sTAG_CHECK, sIdle)
+      when(io.inst_rreq) {
+        state := sTAG_CHECK
+      }
     }
     is(sTAG_CHECK) {
-      /* ---------- 状态 ---------- */
       when(tagSram.io.douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) {
         io.inst_valid := true.B
         io.inst_out   := dataOutVec(offset)
+        io.hit        := true.B
         state         := sIdle
       }.otherwise {
         state := sREFILL
       }
     }
     is(sREFILL) { /* sIdle */
-      io.mem_raddr := io.inst_addr
+      io.mem_raddr := ((io.inst_addr >> (Constants.Word_Align + Constants.Offset_Width).U)) << (Constants.Word_Align + Constants.Offset_Width).U
       when(io.mem_rrdy) {
         io.mem_ren := "b1111".U(4.W)
         state      := sI_S1_mem
       }.otherwise {
-        io.mem_ren := 0.U
-        state      := sI_S0_mem
+        state := sI_S0_mem
       }
     }
     is(sI_S0_mem) {
@@ -89,11 +87,8 @@ class ICache extends Module {
         io.mem_ren := "b1111".U(4.W)
         state      := sI_S1_mem
       }.otherwise {
-        io.mem_ren := 0.U
-        state      := sI_S0_mem
+        state := sI_S0_mem
       }
-      // io.mem_ren := Mux(io.mem_rrdy, "b1111".U(4.W), 0.U)
-      // state      := Mux(io.mem_rrdy, sI_S1_mem, sI_S0_mem)
     }
     is(sI_S1_mem) {
       /* ---------- 状态 ---------- */
@@ -105,8 +100,6 @@ class ICache extends Module {
         dataSram.io.wea   := true.B
         dataSram.io.addra := index
         dataSram.io.dina  := io.mem_rdata
-      }.otherwise {
-        state := sI_S1_mem
       }
     }
   }

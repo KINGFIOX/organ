@@ -19,57 +19,53 @@ module ICache(
   wire [127:0]     _dataSram_douta;
   wire [127:0]     _tagSram_douta;
   reg  [2:0]       state;
-  reg  [2:0]       io_hit_REG;
-  reg  [2:0]       io_hit_REG_1;
-  reg  [2:0]       io_hit_REG_2;
-  wire             _GEN = state == 3'h1;
-  wire             _GEN_0 = _tagSram_douta[24:0] == {1'h1, io_inst_addr[31:8]};
-  wire [3:0][31:0] _GEN_1 =
+  wire             _GEN = state == 3'h0;
+  wire             _GEN_0 = state == 3'h1;
+  wire             _GEN_1 = _tagSram_douta[23:0] == {1'h1, io_inst_addr[31:9]};
+  wire             io_hit_0 = ~_GEN & _GEN_0 & _GEN_1;
+  wire [3:0][31:0] _GEN_2 =
     {{_dataSram_douta[127:96]},
      {_dataSram_douta[95:64]},
      {_dataSram_douta[63:32]},
      {_dataSram_douta[31:0]}};
-  wire             _GEN_2 = state == 3'h2;
-  wire             _GEN_3 = state == 3'h3;
-  wire             _GEN_4 = state == 3'h4;
-  wire             _GEN_5 =
-    ~(~(|state) | _GEN | _GEN_2 | _GEN_3) & _GEN_4 & io_mem_rvalid;
+  wire             _GEN_3 = state == 3'h2;
+  wire             _GEN_4 = state == 3'h3;
+  wire             _GEN_5 = state == 3'h4;
+  wire             _GEN_6 = ~(_GEN | _GEN_0 | _GEN_3 | _GEN_4) & _GEN_5 & io_mem_rvalid;
+  wire [5:0]       _GEN_7 = {1'h0, io_inst_addr[8:4]};
   always @(posedge clock) begin
     if (reset)
       state <= 3'h0;
-    else if (|state) begin
-      if (_GEN)
-        state <= {1'h0, ~_GEN_0, 1'h0};
-      else if (_GEN_2 | _GEN_3)
-        state <= io_mem_rrdy ? 3'h4 : 3'h3;
-      else if (_GEN_4)
-        state <= io_mem_rvalid ? 3'h1 : 3'h4;
+    else if (_GEN) begin
+      if (io_inst_rreq)
+        state <= 3'h1;
     end
-    else
-      state <= {2'h0, io_inst_rreq};
-    io_hit_REG <= state;
-    io_hit_REG_1 <= state;
-    io_hit_REG_2 <= io_hit_REG_1;
+    else if (_GEN_0)
+      state <= {1'h0, ~_GEN_1, 1'h0};
+    else if (_GEN_3 | _GEN_4)
+      state <= io_mem_rrdy ? 3'h4 : 3'h3;
+    else if (_GEN_5 & io_mem_rvalid)
+      state <= 3'h1;
   end // always @(posedge)
   blk_mem_gen_1 tagSram (
     .clka  (clock),
-    .wea   (_GEN_5),
-    .addra (io_inst_addr[7:2]),
-    .dina  ({104'h1, io_inst_addr[31:8]}),
+    .wea   (_GEN_6),
+    .addra (_GEN_7),
+    .dina  ({105'h1, io_inst_addr[31:9]}),
     .douta (_tagSram_douta)
   );
   blk_mem_gen_1 dataSram (
     .clka  (clock),
-    .wea   (_GEN_5),
-    .addra (io_inst_addr[7:2]),
+    .wea   (_GEN_6),
+    .addra (_GEN_7),
     .dina  (io_mem_rdata),
     .douta (_dataSram_douta)
   );
-  assign io_inst_valid = (|state) & _GEN & _GEN_0;
-  assign io_inst_out = _GEN_1[io_inst_addr[1:0]];
+  assign io_inst_valid = io_hit_0;
+  assign io_inst_out = _GEN_2[io_inst_addr[3:2]];
   assign io_mem_ren =
-    ~(|state) | _GEN ? 4'h0 : _GEN_2 ? {4{io_mem_rrdy}} : {4{_GEN_3 & io_mem_rrdy}};
-  assign io_mem_raddr = io_inst_addr;
-  assign io_hit = ~(|state) & io_hit_REG == 3'h1 & io_hit_REG_2 == 3'h0;
+    _GEN | _GEN_0 ? 4'h0 : _GEN_3 ? {4{io_mem_rrdy}} : {4{_GEN_4 & io_mem_rrdy}};
+  assign io_mem_raddr = {io_inst_addr[31:4], 4'h0};
+  assign io_hit = io_hit_0;
 endmodule
 
