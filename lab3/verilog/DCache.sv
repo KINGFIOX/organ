@@ -24,54 +24,42 @@ module DCache(
   reg  [1:0] r_state;
   reg  [3:0] ren_r;
   wire       _GEN = r_state == 2'h0;
-  wire       _GEN_0 = _GEN & (|data_ren);
-  wire       _GEN_1 = r_state == 2'h1;
-  wire       _GEN_2 = r_state == 2'h2;
-  wire       _GEN_3 = _GEN | _GEN_1;
+  wire       _GEN_0 = r_state == 2'h1;
+  wire       _GEN_1 = r_state == 2'h2 & dev_rvalid;
+  wire       wr_resp = dev_wrdy & dev_wen_0 == 4'h0;
   reg  [1:0] w_state;
   reg  [3:0] wen_r;
-  wire       wr_resp = dev_wrdy & dev_wen_0 == 4'h0;
-  wire       _GEN_4 = w_state == 2'h0;
-  wire       _GEN_5 = _GEN_4 & (|data_wen);
-  wire       _GEN_6 = w_state == 2'h1;
-  assign dev_wen_0 =
-    _GEN_4
-      ? ((|data_wen) & dev_wrdy ? data_wen : 4'h0)
-      : _GEN_6 & dev_wrdy ? wen_r : 4'h0;
+  wire       _GEN_2 = w_state == 2'h0;
+  wire       _GEN_3 = _GEN_2 & (|data_wen);
+  wire       _GEN_4 = w_state == 2'h1;
+  assign dev_wen_0 = _GEN_2 ? ((|data_wen) & dev_wrdy ? data_wen : 4'h0) : _GEN_4 & dev_wrdy ? wen_r : 4'h0;
   always @(posedge cpu_clk) begin
     if (cpu_rst) begin
       r_state <= 2'h0;
+      ren_r <= 4'h0;
       w_state <= 2'h0;
+      wen_r <= 4'h0;
     end
     else begin
-      automatic logic [1:0]      _GEN_7 = dev_rrdy ? 2'h2 : 2'h1;
-      automatic logic [1:0]      _GEN_8 = dev_wrdy ? 2'h2 : 2'h1;
-      automatic logic [3:0][1:0] _GEN_9 =
-        {{r_state}, {{~dev_rvalid, 1'h0}}, {_GEN_7}, {(|data_ren) ? _GEN_7 : 2'h0}};
-      automatic logic [3:0][1:0] _GEN_10 =
-        {{w_state}, {{~wr_resp, 1'h0}}, {_GEN_8}, {(|data_wen) ? _GEN_8 : 2'h0}};
-      r_state <= _GEN_9[r_state];
-      w_state <= _GEN_10[w_state];
+      automatic logic [1:0]      _GEN_5 = dev_rrdy ? 2'h2 : 2'h1;
+      automatic logic [1:0]      _GEN_6 = dev_wrdy ? 2'h2 : 2'h1;
+      automatic logic [3:0][1:0] _GEN_7 = {{r_state}, {{~dev_rvalid, 1'h0}}, {_GEN_5}, {(|data_ren) ? _GEN_5 : r_state}};
+      automatic logic [3:0][1:0] _GEN_8 = {{w_state}, {{~wr_resp, 1'h0}}, {_GEN_6}, {(|data_wen) ? _GEN_6 : 2'h0}};
+      r_state <= _GEN_7[r_state];
+      if (~(_GEN & (|data_ren)) | dev_rrdy) begin end
+      else ren_r <= data_ren;
+      w_state <= _GEN_8[w_state];
+      if (~_GEN_3 | dev_wrdy) begin end
+      else wen_r <= data_wen;
     end
-    if (~_GEN_0 | dev_rrdy) begin
-    end
-    else
-      ren_r <= data_ren;
-    if (~_GEN_5 | dev_wrdy) begin
-    end
-    else
-      wen_r <= data_wen;
   end // always @(posedge)
-  assign data_valid = ~_GEN_3 & _GEN_2 & dev_rvalid;
-  assign data_rdata = _GEN_3 | ~(_GEN_2 & dev_rvalid) ? 32'h0 : dev_rdata[31:0];
-  assign data_wresp = ~(_GEN_4 | _GEN_6) & w_state == 2'h2 & wr_resp;
+  assign data_valid = 1'h0;
+  assign data_rdata = 32'h0;
+  assign data_wresp = ~(_GEN_2 | _GEN_4) & w_state == 2'h2 & wr_resp;
   assign dev_wen = dev_wen_0;
-  assign dev_waddr = _GEN_5 ? data_addr : 32'h0;
-  assign dev_wdata = _GEN_5 ? data_wdata : 32'h0;
-  assign dev_ren =
-    _GEN
-      ? ((|data_ren) & dev_rrdy ? data_ren : 4'h0)
-      : _GEN_1 & dev_rrdy ? ren_r : 4'h0;
-  assign dev_raddr = _GEN_0 ? data_addr : 32'h0;
+  assign dev_waddr = _GEN_3 ? data_addr : 32'h0;
+  assign dev_wdata = _GEN_3 ? data_wdata : 32'h0;
+  assign dev_ren = _GEN ? ((|data_ren) & dev_rrdy ? data_ren : 4'h0) : (_GEN_0 ? dev_rrdy : _GEN_1) ? ren_r : 4'h0;
+  assign dev_raddr = _GEN ? ((|data_ren) ? data_addr : 32'h0) : _GEN_0 | ~_GEN_1 ? 32'h0 : data_addr;
 endmodule
 

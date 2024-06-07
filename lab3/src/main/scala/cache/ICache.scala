@@ -109,6 +109,7 @@ import _root_.circt.stage.ChiselStage
 object ICache extends App {
   ChiselStage.emitSystemVerilogFile(
     new ICache,
+    args        = Array("--target", "verilog"),
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info")
   )
 }

@@ -41,101 +41,96 @@ class DCache extends Module {
 
   val uncached = Mux((io.data_addr(31, 16) === "hffff".U(16.W)) & (io.data_ren =/= 0.U | io.data_wen =/= 0.U), true.B, false.B)
 
-  /* ---------- ---------- read ---------- ---------- */
+  /* ---------- read ---------- */
 
-  // Read path state definitions
-  val rIdle :: rStat0 :: rStat1 :: Nil = Enum(3)
-  val r_state                          = RegInit(rIdle)
+  val r_IDLE :: r_STAT0 :: r_STAT1 :: Nil = Enum(3)
+  val r_state                             = RegInit(r_IDLE)
 
-  // Registers for storing state between cycles
-  val ren_r = Reg(UInt(4.W))
+  val ren_r = RegInit(0.U(Constants.CacheLine_Len.W))
 
-  // Read path logic
   switch(r_state) {
-    is(rIdle) {
-      io.data_valid := 0.U
+    is(r_IDLE) {
+      io.data_valid := false.B
       when(io.data_ren.orR) {
-        io.dev_raddr := io.data_addr
         when(io.dev_rrdy) {
-          r_state    := rStat1
           io.dev_ren := io.data_ren
+          r_state    := r_STAT1
         }.otherwise {
-          r_state := rStat0
           ren_r   := io.data_ren
+          r_state := r_STAT0
         }
+        io.dev_raddr := io.data_addr
       }.otherwise {
         io.dev_ren := 0.U
-        r_state    := rIdle
       }
     }
-    is(rStat0) {
+    is(r_STAT0) {
       when(io.dev_rrdy) {
         io.dev_ren := ren_r
-        r_state    := rStat1
+        r_state    := r_STAT1
       }.otherwise {
         io.dev_ren := 0.U
-        r_state    := rStat0
+        r_state    := r_STAT0
       }
     }
-    is(rStat1) {
+    is(r_STAT1) {
       io.dev_ren := 0.U
       when(io.dev_rvalid) {
-        io.data_valid := 1.U
-        io.data_rdata := io.dev_rdata
-        r_state       := rIdle
+        io.dev_ren   := ren_r
+        io.dev_raddr := io.data_addr
+        r_state      := r_IDLE
       }.otherwise {
-        io.data_valid := 0.U
+        io.data_valid := false.B
         io.data_rdata := 0.U
-        r_state       := rStat1
+        r_state       := r_STAT1
       }
     }
   }
 
-  /* ---------- ---------- write ---------- ---------- */
+  /* ---------- read ---------- */
 
-  // Write path state definitions
-  val wIdle :: wStat0 :: wStat1 :: Nil = Enum(3)
-  val w_state                          = RegInit(wIdle)
-
-  val wen_r   = Reg(UInt(4.W))
   val wr_resp = Mux(io.dev_wrdy & (io.dev_wen === 0.U), true.B, false.B)
 
-  // Write path logic
+  val w_IDLE :: w_STAT0 :: w_STAT1 :: Nil = Enum(3)
+  val w_state                             = RegInit(w_IDLE)
+
+  val wen_r = RegInit(0.U(Constants.CacheLine_Len.W))
+
   switch(w_state) {
-    is(wIdle) {
-      io.data_wresp := 0.U
+    is(w_IDLE) {
+      io.data_wresp := false.B
       when(io.data_wen.orR) {
         when(io.dev_wrdy) {
           io.dev_wen := io.data_wen
-          w_state    := wStat1
+          w_state    := w_STAT1
         }.otherwise {
           wen_r   := io.data_wen
-          w_state := wStat0
+          w_state := w_STAT0
         }
         io.dev_waddr := io.data_addr
         io.dev_wdata := io.data_wdata
       }.otherwise {
-        w_state := wIdle
+        io.dev_wen := 0.U
+        w_state    := w_IDLE
       }
     }
-    is(wStat0) {
+    is(w_STAT0) {
       when(io.dev_wrdy) {
+        w_state    := w_STAT1
         io.dev_wen := wen_r
-        w_state    := wStat1
       }.otherwise {
         io.dev_wen := 0.U
-        w_state    := wStat0
+        w_state    := w_STAT0
       }
     }
-    is(wStat1) {
-      io.dev_wen := 0.U;
+    is(w_STAT1) {
       io.dev_wen := 0.U
       when(wr_resp) {
         io.data_wresp := true.B
-        w_state       := wIdle
+        w_state       := w_IDLE
       }.otherwise {
         io.data_wresp := false.B
-        w_state       := wStat1
+        w_state       := w_STAT1
       }
     }
   }
@@ -143,10 +138,12 @@ class DCache extends Module {
 }
 
 import _root_.circt.stage.ChiselStage
+import chisel3.stage.ChiselGeneratorAnnotation
 
-object ICache extends App {
+object DCache extends App {
   ChiselStage.emitSystemVerilogFile(
     new DCache,
+    args        = Array("--target", "verilog"),
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info")
   )
 }

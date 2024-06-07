@@ -23,29 +23,20 @@ module ICache(
   wire             _GEN_0 = state == 3'h1;
   wire             _GEN_1 = _tagSram_douta[23:0] == {1'h1, inst_addr[31:9]};
   wire             hit_0 = ~_GEN & _GEN_0 & _GEN_1;
-  wire [3:0][31:0] _GEN_2 =
-    {{_dataSram_douta[127:96]},
-     {_dataSram_douta[95:64]},
-     {_dataSram_douta[63:32]},
-     {_dataSram_douta[31:0]}};
+  wire [3:0][31:0] _GEN_2 = {{_dataSram_douta[127:96]}, {_dataSram_douta[95:64]}, {_dataSram_douta[63:32]}, {_dataSram_douta[31:0]}};
   wire             _GEN_3 = state == 3'h2;
   wire             _GEN_4 = state == 3'h3;
   wire             _GEN_5 = state == 3'h4;
   wire             _GEN_6 = ~(_GEN | _GEN_0 | _GEN_3 | _GEN_4) & _GEN_5 & mem_rvalid;
   wire [5:0]       _GEN_7 = {1'h0, inst_addr[8:4]};
   always @(posedge cpu_clk) begin
-    if (cpu_rst)
-      state <= 3'h0;
+    if (cpu_rst) state <= 3'h0;
     else if (_GEN) begin
-      if (inst_rreq)
-        state <= 3'h1;
+      if (inst_rreq) state <= 3'h1;
     end
-    else if (_GEN_0)
-      state <= {1'h0, ~_GEN_1, 1'h0};
-    else if (_GEN_3 | _GEN_4)
-      state <= mem_rrdy ? 3'h4 : 3'h3;
-    else if (_GEN_5 & mem_rvalid)
-      state <= 3'h1;
+    else if (_GEN_0) state <= {1'h0, ~_GEN_1, 1'h0};
+    else if (_GEN_3 | _GEN_4) state <= mem_rrdy ? 3'h4 : 3'h3;
+    else if (_GEN_5 & mem_rvalid) state <= 3'h1;
   end // always @(posedge)
   blk_mem_gen_1 tagSram (
     .clka  (cpu_clk),
@@ -63,8 +54,7 @@ module ICache(
   );
   assign inst_valid = hit_0;
   assign inst_out = _GEN_2[inst_addr[3:2]];
-  assign mem_ren =
-    _GEN | _GEN_0 ? 4'h0 : _GEN_3 ? {4{mem_rrdy}} : {4{_GEN_4 & mem_rrdy}};
+  assign mem_ren = _GEN | _GEN_0 ? 4'h0 : _GEN_3 ? {4{mem_rrdy}} : {4{_GEN_4 & mem_rrdy}};
   assign mem_raddr = {inst_addr[31:4], 4'h0};
   assign hit = hit_0;
 endmodule

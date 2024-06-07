@@ -42,8 +42,12 @@ module ICache(
     end
     else if (_GEN_0)
       state <= {1'h0, ~_GEN_1, 1'h0};
-    else if (_GEN_3 | _GEN_4)
+    else if (_GEN_3)
       state <= io_mem_rrdy ? 3'h4 : 3'h3;
+    else if (_GEN_4) begin
+      if (io_mem_rrdy)
+        state <= 3'h4;
+    end
     else if (_GEN_5 & io_mem_rvalid)
       state <= 3'h1;
   end // always @(posedge)
