@@ -24,6 +24,9 @@ class DCache extends Module {
     val dev_raddr  = Output(UInt(Constants.Addr_Width.W))
     val dev_rvalid = Input(Bool())
     val dev_rdata  = Input(UInt(Constants.CacheLine_Width.W)) // Assuming `BLK_SIZE = 4 * 32`
+    val hit_r      = Output(Bool())
+    val hit_w      = Output(Bool())
+    val uncached   = Output(Bool())
   })
 
   /* ---------- ---------- init ---------- ---------- */
@@ -39,98 +42,156 @@ class DCache extends Module {
   io.dev_ren   := 0.U
   io.dev_raddr := 0.U
 
-  val uncached = Mux((io.data_addr(31, 16) === "hffff".U(16.W)) & (io.data_ren =/= 0.U | io.data_wen =/= 0.U), true.B, false.B)
+  io.hit_r := 0.U
+  io.hit_w := 0.U
+
+  /* ---------- ---------- addr ---------- ---------- */
+
+  io.uncached := Mux((io.data_addr(31, 16) === "hffff".U(16.W)) & (io.data_ren =/= 0.U | io.data_wen =/= 0.U), true.B, false.B)
+  val nonAlign = (io.data_addr & "b011".U(Constants.Addr_Width.W)).orR
+
+  /* ---------- ---------- sram ---------- ---------- */
+  import memory.blk_mem_gen_1
+
+  val tagSram = Module(new blk_mem_gen_1)
+  tagSram.io.addra := 0.U
+  tagSram.io.dina  := 0.U
+  tagSram.io.wea   := 0.U
+  tagSram.io.clka  := clock
+  val U_dsram = Module(new blk_mem_gen_1)
+  U_dsram.io.addra := 0.U
+  U_dsram.io.dina  := 0.U
+  U_dsram.io.wea   := 0.U
+  U_dsram.io.clka  := clock
+
+  /* ---------- ---------- addr 划分 ---------- ---------- */
+
+  val tag    = io.data_addr(Constants.Tag_up, Constants.Tag_down)
+  val index  = io.data_addr(Constants.Index_up, Constants.Index_down)
+  val offset = io.data_addr(Constants.Offset_up, Constants.Offset_down)
+
+  /* ---------- ---------- sram 数据通路 ---------- ---------- */
+
+  tagSram.io.addra := index
+  U_dsram.io.addra := index
+
+  val sram_valid_tag_out = tagSram.io.douta(Constants.Tag_Width, 0)
+
+  val dcacheOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+  dcacheOutVec := U_dsram.io.douta.asTypeOf(dcacheOutVec)
+
+  val dataInVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+  dataInVec := U_dsram.io.dina.asTypeOf(dataInVec)
 
   /* ---------- read ---------- */
 
-  val r_IDLE :: r_STAT0 :: r_STAT1 :: Nil = Enum(3)
-  val r_state                             = RegInit(r_IDLE)
+  val r_IDLE :: r_NOCACHE0 /* 发送请求 */ :: r_NOCACHE1 /* 准备接受 */ :: r_CHECK :: r_REFILL1 :: Nil = Enum(5)
+  val r_state                                                                                 = RegInit(r_IDLE)
 
   val ren_r = RegInit(0.U(Constants.CacheLine_Len.W))
 
   switch(r_state) {
     is(r_IDLE) {
-      io.data_valid := false.B
-      when(io.data_ren.orR) {
-        when(io.dev_rrdy) {
-          io.dev_ren := io.data_ren
-          r_state    := r_STAT1
-        }.otherwise {
-          ren_r   := io.data_ren
-          r_state := r_STAT0
+      when(io.data_ren =/= 0.U) {
+        ren_r := io.data_ren
+        when(io.uncached || nonAlign) { /* 直接访问主存 */
+          r_state := r_NOCACHE0
+        }.otherwise { /* 访问 cache */
+          r_state := r_CHECK
         }
-        io.dev_raddr := io.data_addr
-      }.otherwise {
-        io.dev_ren := 0.U
       }
     }
-    is(r_STAT0) {
+    is(r_NOCACHE0) {
       when(io.dev_rrdy) {
-        io.dev_ren := ren_r
-        r_state    := r_STAT1
-      }.otherwise {
-        io.dev_ren := 0.U
-        r_state    := r_STAT0
-      }
-    }
-    is(r_STAT1) {
-      io.dev_ren := 0.U
-      when(io.dev_rvalid) {
         io.dev_ren   := ren_r
         io.dev_raddr := io.data_addr
-        r_state      := r_IDLE
-      }.otherwise {
-        io.data_valid := false.B
-        io.data_rdata := 0.U
-        r_state       := r_STAT1
+        r_state      := r_NOCACHE1
+      }
+    }
+    is(r_NOCACHE1) {
+      io.dev_ren := 0.U
+      when(io.dev_rvalid) {
+        io.data_rdata := io.dev_rdata
+        io.data_valid := 1.U
+        r_state       := r_IDLE
+      }
+    }
+    is(r_CHECK) {
+      when(sram_valid_tag_out === Cat(1.U(1.W), tag)) { /* hit */
+        io.data_valid := true.B
+        io.data_rdata := dcacheOutVec(offset)
+        r_state       := r_IDLE
+        io.hit_r      := true.B
+        printf("dataOutVec=%x\n", dcacheOutVec.asUInt)
+      }.otherwise { /* miss -> refill */
+        when(io.dev_rrdy) {
+          io.dev_ren   := "b1111".U(4.W)
+          io.dev_raddr := Cat(tag, index, 0.U((Constants.Offset_Width + Constants.Word_Align).W))
+          r_state      := r_REFILL1
+        }
+      }
+    }
+    is(r_REFILL1) {
+      when(io.dev_rvalid) {
+        /* 输出 */
+        val devOutDataVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+        devOutDataVec := io.dev_rdata.asTypeOf(devOutDataVec)
+
+        io.data_rdata := devOutDataVec(offset)
+        io.data_valid := 1.U
+
+        /* 更新 cache */
+        tagSram.io.wea  := true.B
+        tagSram.io.dina := Cat(1.U, tag)
+        U_dsram.io.wea  := true.B
+        U_dsram.io.dina := io.dev_rdata
+
+        /* 状态 */
+        r_state := r_IDLE
       }
     }
   }
 
-  /* ---------- read ---------- */
-
-  val wr_resp = Mux(io.dev_wrdy & (io.dev_wen === 0.U), true.B, false.B)
+  /* ---------- write ---------- */
 
   val w_IDLE :: w_STAT0 :: w_STAT1 :: Nil = Enum(3)
   val w_state                             = RegInit(w_IDLE)
 
   val wen_r = RegInit(0.U(Constants.CacheLine_Len.W))
+  val wdata = RegInit(0.U(Constants.Word_Width.W))
+
+  // /* io.dev_wrdy 再次拉高的时候，就行了 */
+  // val wr_resp = io.dev_wrdy & (io.dev_wen === 0.U)
+  val wr_resp = ~RegNext(io.dev_wrdy) && io.dev_wrdy
 
   switch(w_state) {
     is(w_IDLE) {
-      io.data_wresp := false.B
-      when(io.data_wen.orR) {
-        when(io.dev_wrdy) {
-          io.dev_wen := io.data_wen
-          w_state    := w_STAT1
-        }.otherwise {
-          wen_r   := io.data_wen
-          w_state := w_STAT0
-        }
-        io.dev_waddr := io.data_addr
-        io.dev_wdata := io.data_wdata
-      }.otherwise {
-        io.dev_wen := 0.U
-        w_state    := w_IDLE
+      when(io.data_wen =/= 0.U) {
+        wen_r   := io.data_wen
+        wdata   := io.data_wdata
+        w_state := w_STAT0
       }
     }
     is(w_STAT0) {
       when(io.dev_wrdy) {
-        w_state    := w_STAT1
-        io.dev_wen := wen_r
-      }.otherwise {
-        io.dev_wen := 0.U
-        w_state    := w_STAT0
+        io.dev_wen   := wen_r
+        io.dev_waddr := io.data_addr
+        io.dev_wdata := wdata
+        w_state      := w_STAT1
+        when(~io.uncached && ~nonAlign && sram_valid_tag_out === Cat(1.U(1.W), tag)) { /* cacheline 直接作废 */
+          tagSram.io.wea  := true.B
+          tagSram.io.dina := 0.U
+          U_dsram.io.wea  := true.B
+          U_dsram.io.dina := 0.U
+          io.hit_w        := true.B
+          // w_state := w_STAT1
+        }
       }
     }
     is(w_STAT1) {
-      io.dev_wen := 0.U
       when(wr_resp) {
         io.data_wresp := true.B
         w_state       := w_IDLE
-      }.otherwise {
-        io.data_wresp := false.B
-        w_state       := w_STAT1
       }
     }
   }
@@ -143,7 +204,7 @@ import chisel3.stage.ChiselGeneratorAnnotation
 object DCache extends App {
   ChiselStage.emitSystemVerilogFile(
     new DCache,
-    args        = Array("--target", "verilog"),
+    // args        = Array("--target", "verilog"),
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info")
   )
 }

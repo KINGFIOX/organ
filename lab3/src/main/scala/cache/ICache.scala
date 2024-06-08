@@ -48,13 +48,15 @@ class ICache extends Module {
   val index  = io.inst_addr(Constants.Index_up, Constants.Index_down)
   val offset = io.inst_addr(Constants.Offset_up, Constants.Offset_down)
 
+  tagSram.io.addra := index
+
   val dataOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
   dataOutVec := dataSram.io.douta.asTypeOf(dataOutVec)
 
   /* ---------- ---------- 状态机 ---------- ---------- */
   // 0 1 2
-  val sIdle :: sTAG_CHECK :: sREFILL :: sI_S0_mem :: sI_S1_mem :: Nil = Enum(5)
-  val state                                                           = RegInit(sIdle)
+  val sIdle :: sTAG_CHECK :: sREFILL :: sI_S1_mem :: Nil = Enum(4)
+  val state                                              = RegInit(sIdle)
 
   switch(state) {
     is(sIdle) {
@@ -75,14 +77,6 @@ class ICache extends Module {
     }
     is(sREFILL) { /* sIdle */
       io.mem_raddr := Cat(tag, index, 0.U((Constants.Offset_Width + Constants.Word_Align).W))
-      when(io.mem_rrdy) {
-        io.mem_ren := "b1111".U(4.W)
-        state      := sI_S1_mem
-      }.otherwise {
-        state := sI_S0_mem
-      }
-    }
-    is(sI_S0_mem) {
       when(io.mem_rrdy) {
         io.mem_ren := "b1111".U(4.W)
         state      := sI_S1_mem
@@ -109,7 +103,7 @@ import _root_.circt.stage.ChiselStage
 object ICache extends App {
   ChiselStage.emitSystemVerilogFile(
     new ICache,
-    args        = Array("--target", "verilog"),
+    // args        = Array("--target", "verilog"),
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info")
   )
 }
