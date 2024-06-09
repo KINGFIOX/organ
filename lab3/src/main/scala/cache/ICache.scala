@@ -4,10 +4,14 @@ import chisel3._
 import chisel3.util._
 
 import common.Constants
-import memory._
 import scala.collection.immutable.Stream.Cons
 
-class ICache extends Module {
+import memory.blk_mem_gen_1;
+
+import cache.LRU;
+
+class ICache(n: Int) extends Module {
+  require(isPow2(n))
   val io = IO(new Bundle {
     val inst_rreq  = Input(Bool()) // Instruction fetch signal
     val inst_addr  = Input(UInt(Constants.Addr_Width.W))
@@ -32,27 +36,48 @@ class ICache extends Module {
   io.hit        := false.B
 
   /* ---------- ---------- 初始化 sram ---------- ---------- */
-  val tagSram = Module(new blk_mem_gen_1)
-  tagSram.io.addra := DontCare
-  tagSram.io.dina  := DontCare
-  tagSram.io.wea   := false.B
-  tagSram.io.clka  := clock
-  val dataSram = Module(new blk_mem_gen_1)
-  dataSram.io.addra := DontCare
-  dataSram.io.dina  := DontCare
-  dataSram.io.wea   := false.B
-  dataSram.io.clka  := clock
+  val tagSrams  = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
+  val dataSrams = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
+
+// Configure each SRAM module
+  for (i <- 0 until n) {
+    tagSrams(i).addra := DontCare
+    tagSrams(i).dina  := DontCare
+    tagSrams(i).wea   := false.B
+    tagSrams(i).clka  := clock
+
+    dataSrams(i).addra := DontCare
+    dataSrams(i).dina  := DontCare
+    dataSrams(i).wea   := false.B
+    dataSrams(i).clka  := clock
+  }
 
   /* ---------- ---------- addr 划分 ---------- ---------- */
   val tag    = io.inst_addr(Constants.Tag_up, Constants.Tag_down)
   val index  = io.inst_addr(Constants.Index_up, Constants.Index_down)
   val offset = io.inst_addr(Constants.Offset_up, Constants.Offset_down)
 
-  tagSram.io.addra  := index
-  dataSram.io.addra := index
+  /* ---------- ---------- 判断命中，以及选取那一路的逻辑 ---------- ---------- */
 
-  val dataOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-  dataOutVec := dataSram.io.douta.asTypeOf(dataOutVec)
+  val dataOutVec = VecInit(Seq.fill(Constants.CacheLine_Len)(0.U(Constants.Word_Width.W)))
+
+  /* ---------- cache ---------- */
+  val hitVec = WireInit(VecInit(Seq.fill(n)(false.B)))
+
+  for (i <- 0 until n) {
+    tagSrams(i).addra  := index
+    dataSrams(i).addra := index
+    when(tagSrams(i).douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) {
+      hitVec(i)  := true.B
+      dataOutVec := dataSrams(i).douta.asTypeOf(dataOutVec)
+    }
+  }
+
+  /* ---------- ---------- victim ---------- ---------- */
+
+  val lru = Module(new LRU(n))
+  lru.io.hitVec := hitVec
+  val victim = lru.io.victim
 
   /* ---------- ---------- 状态机 ---------- ---------- */
   // 0 1 2
@@ -67,11 +92,11 @@ class ICache extends Module {
       }
     }
     is(sTAG_CHECK) {
-      when(tagSram.io.douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) {
+      when(hitVec.asUInt =/= 0.U) {
         io.inst_valid := true.B
         io.inst_out   := dataOutVec(offset)
-        io.hit        := true.B
         state         := sIdle
+        io.hit        := true.B
       }.otherwise {
         state := sREFILL
       }
@@ -86,11 +111,11 @@ class ICache extends Module {
     is(sI_S1_mem) {
       /* ---------- 状态 ---------- */
       when(io.mem_rvalid) {
-        state            := sTAG_CHECK
-        tagSram.io.wea   := true.B
-        tagSram.io.dina  := Cat(1.U, tag)
-        dataSram.io.wea  := true.B
-        dataSram.io.dina := io.mem_rdata
+        state                  := sTAG_CHECK
+        tagSrams(victim).wea   := true.B
+        tagSrams(victim).dina  := Cat(1.U, tag)
+        dataSrams(victim).wea  := true.B
+        dataSrams(victim).dina := io.mem_rdata
       }
     }
   }
@@ -101,7 +126,7 @@ import _root_.circt.stage.ChiselStage
 
 object ICache extends App {
   ChiselStage.emitSystemVerilogFile(
-    new ICache,
+    new ICache(4),
     // args        = Array("--target", "verilog"),
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info")
   )
