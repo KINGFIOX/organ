@@ -171,12 +171,11 @@ class DCache extends Module {
         io.dev_wdata := wdata
         w_state      := w_STAT1
         when(~io.uncached && ~nonAlign && sram_valid_tag_out === Cat(1.U(1.W), tag)) { /* cacheline 直接作废 */
-          tagSram.io.wea  := true.B
-          tagSram.io.dina := 0.U
+          val line = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+          line(offset)    := wdata
           U_dsram.io.wea  := true.B
-          U_dsram.io.dina := 0.U
+          U_dsram.io.dina := line.asUInt
           io.hit_w        := true.B
-          // w_state := w_STAT1
         }
       }
     }
@@ -191,12 +190,10 @@ class DCache extends Module {
 }
 
 import _root_.circt.stage.ChiselStage
-import chisel3.stage.ChiselGeneratorAnnotation
 
 object DCache extends App {
   ChiselStage.emitSystemVerilogFile(
     new DCache,
-    // args        = Array("--target", "verilog"),
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info")
   )
 }
