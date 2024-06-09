@@ -122,7 +122,6 @@ class DCache extends Module {
         io.data_rdata := dcacheOutVec(offset)
         r_state       := r_IDLE
         io.hit_r      := true.B
-        printf("dataOutVec=%x\n", dcacheOutVec.asUInt)
       }.otherwise { /* miss -> refill */
         when(io.dev_rrdy) {
           io.dev_ren   := "b1111".U(4.W)
@@ -133,13 +132,6 @@ class DCache extends Module {
     }
     is(r_REFILL1) {
       when(io.dev_rvalid) {
-        /* 输出 */
-        val devOutDataVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-        devOutDataVec := io.dev_rdata.asTypeOf(devOutDataVec)
-
-        io.data_rdata := devOutDataVec(offset)
-        io.data_valid := 1.U
-
         /* 更新 cache */
         tagSram.io.wea  := true.B
         tagSram.io.dina := Cat(1.U, tag)
@@ -147,7 +139,7 @@ class DCache extends Module {
         U_dsram.io.dina := io.dev_rdata
 
         /* 状态 */
-        r_state := r_IDLE
+        r_state := r_CHECK
       }
     }
   }
@@ -158,7 +150,7 @@ class DCache extends Module {
   val w_state                             = RegInit(w_IDLE)
 
   val wen_r = RegInit(0.U(Constants.CacheLine_Len.W))
-  val wdata = RegInit(0.U(Constants.Word_Width.W))
+  val wdata = RegInit(0.U(Constants.Word_Width.W)) /* 这个必须有，因为 wdata 会立即撤销 */
 
   // /* io.dev_wrdy 再次拉高的时候，就行了 */
   // val wr_resp = io.dev_wrdy & (io.dev_wen === 0.U)

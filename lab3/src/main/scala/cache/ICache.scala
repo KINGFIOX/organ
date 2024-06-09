@@ -48,7 +48,8 @@ class ICache extends Module {
   val index  = io.inst_addr(Constants.Index_up, Constants.Index_down)
   val offset = io.inst_addr(Constants.Offset_up, Constants.Offset_down)
 
-  tagSram.io.addra := index
+  tagSram.io.addra  := index
+  dataSram.io.addra := index
 
   val dataOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
   dataOutVec := dataSram.io.douta.asTypeOf(dataOutVec)
@@ -85,13 +86,11 @@ class ICache extends Module {
     is(sI_S1_mem) {
       /* ---------- 状态 ---------- */
       when(io.mem_rvalid) {
-        state             := sTAG_CHECK
-        tagSram.io.wea    := true.B
-        tagSram.io.addra  := index
-        tagSram.io.dina   := Cat(1.U, tag)
-        dataSram.io.wea   := true.B
-        dataSram.io.addra := index
-        dataSram.io.dina  := io.mem_rdata
+        state            := sTAG_CHECK
+        tagSram.io.wea   := true.B
+        tagSram.io.dina  := Cat(1.U, tag)
+        dataSram.io.wea  := true.B
+        dataSram.io.dina := io.mem_rdata
       }
     }
   }
