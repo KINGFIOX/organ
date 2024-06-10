@@ -10,7 +10,7 @@ import memory.blk_mem_gen_1;
 
 import cache.LRU;
 
-class ICache(n: Int) extends Module {
+class ICache(n: Int = 2) extends Module {
   require(isPow2(n))
   val io = IO(new Bundle {
     val inst_rreq  = Input(Bool()) // Instruction fetch signal
@@ -41,15 +41,13 @@ class ICache(n: Int) extends Module {
 
 // Configure each SRAM module
   for (i <- 0 until n) {
-    tagSrams(i).addra := DontCare
-    tagSrams(i).dina  := DontCare
-    tagSrams(i).wea   := false.B
-    tagSrams(i).clka  := clock
+    tagSrams(i).dina := DontCare
+    tagSrams(i).wea  := false.B
+    tagSrams(i).clka := clock
 
-    dataSrams(i).addra := DontCare
-    dataSrams(i).dina  := DontCare
-    dataSrams(i).wea   := false.B
-    dataSrams(i).clka  := clock
+    dataSrams(i).dina := DontCare
+    dataSrams(i).wea  := false.B
+    dataSrams(i).clka := clock
   }
 
   /* ---------- ---------- addr 划分 ---------- ---------- */
