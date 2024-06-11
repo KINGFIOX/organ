@@ -1,10 +1,11 @@
+package cache;
+
 import chisel3._
 import chisel3.util._
 
 import common.Constants
 
 import memory.blk_mem_gen_1
-import cache.LRU
 
 class DCache(n: Int = 2) extends Module {
   val io = IO(new Bundle {
@@ -27,9 +28,6 @@ class DCache(n: Int = 2) extends Module {
     val dev_raddr  = Output(UInt(Constants.Addr_Width.W))
     val dev_rvalid = Input(Bool())
     val dev_rdata  = Input(UInt(Constants.CacheLine_Width.W)) // Assuming `BLK_SIZE = 4 * 32`
-    val hit_r      = Output(Bool())
-    val hit_w      = Output(Bool())
-    val uncached   = Output(Bool())
   })
 
   /* ---------- ---------- init ---------- ---------- */
@@ -45,12 +43,16 @@ class DCache(n: Int = 2) extends Module {
   io.dev_ren   := 0.U
   io.dev_raddr := 0.U
 
-  io.hit_r := 0.U
-  io.hit_w := 0.U
+  val hit_r = RegInit(false.B)
+  dontTouch(hit_r)
+  val hit_w = RegInit(false.B)
+  dontTouch(hit_w)
 
   /* ---------- ---------- addr ---------- ---------- */
 
-  io.uncached := Mux((io.data_addr(31, 16) === "hffff".U(16.W)) & (io.data_ren =/= 0.U | io.data_wen =/= 0.U), true.B, false.B)
+  val uncached = Mux((io.data_addr(31, 16) === "hffff".U(16.W)) & (io.data_ren =/= 0.U | io.data_wen =/= 0.U), true.B, false.B)
+  dontTouch(uncached)
+
   val nonAlign = (io.data_addr & "b011".U(Constants.Addr_Width.W)).orR
 
   /* ---------- ---------- sram ---------- ---------- */
@@ -68,17 +70,6 @@ class DCache(n: Int = 2) extends Module {
     dataSrams(i).wea  := false.B
     dataSrams(i).clka := clock
   }
-
-  // val tagSram = Module(new blk_mem_gen_1)
-  // tagSram.io.addra := 0.U
-  // tagSram.io.dina  := 0.U
-  // tagSram.io.wea   := 0.U
-  // tagSram.io.clka  := clock
-  // val U_dsram = Module(new blk_mem_gen_1)
-  // U_dsram.io.addra := 0.U
-  // U_dsram.io.dina  := 0.U
-  // U_dsram.io.wea   := 0.U
-  // U_dsram.io.clka  := clock
 
   /* ---------- ---------- addr 划分 ---------- ---------- */
 
@@ -105,9 +96,9 @@ class DCache(n: Int = 2) extends Module {
 
   /* ---------- ---------- victim ---------- ---------- */
 
-  val lru = Module(new LRU(n))
-  lru.io.hitVec := hitVec
-  val victim = lru.io.victim
+  val cnt = Counter(n)
+  cnt.inc()
+  val victim = cnt.value
 
   /* ---------- read ---------- */
 
@@ -120,7 +111,7 @@ class DCache(n: Int = 2) extends Module {
     is(r_IDLE) {
       when(io.data_ren =/= 0.U) {
         ren_r := io.data_ren
-        when(io.uncached || nonAlign) { /* 直接访问主存 */
+        when(uncached || nonAlign) { /* 直接访问主存 */
           r_state := r_NOCACHE0
         }.otherwise { /* 访问 cache */
           r_state := r_CHECK
@@ -147,7 +138,7 @@ class DCache(n: Int = 2) extends Module {
         io.data_valid := true.B
         io.data_rdata := dcacheOutVec(offset)
         r_state       := r_IDLE
-        io.hit_r      := true.B
+        hit_r         := true.B
       }.otherwise { /* miss -> refill */
         when(io.dev_rrdy) {
           io.dev_ren   := "b1111".U(4.W)
@@ -196,12 +187,12 @@ class DCache(n: Int = 2) extends Module {
         io.dev_waddr := io.data_addr
         io.dev_wdata := wdata
         w_state      := w_STAT1
-        when(~io.uncached && ~nonAlign && hitVec.asUInt.orR) { /* cacheline 直接作废 */
+        when(~uncached && ~nonAlign && hitVec.asUInt.orR) { /* cacheline 直接作废 */
           val line = dataSrams(hitIndex).douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
           line(offset)             := wdata
           dataSrams(hitIndex).wea  := true.B
           dataSrams(hitIndex).dina := line.asUInt
-          io.hit_w                 := true.B
+          hit_w                    := true.B
         }
       }
     }

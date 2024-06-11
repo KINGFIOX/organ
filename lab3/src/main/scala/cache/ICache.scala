@@ -8,8 +8,6 @@ import scala.collection.immutable.Stream.Cons
 
 import memory.blk_mem_gen_1;
 
-import cache.LRU;
-
 class ICache(n: Int = 2) extends Module {
   require(isPow2(n))
   val io = IO(new Bundle {
@@ -25,15 +23,14 @@ class ICache(n: Int = 2) extends Module {
     // 握手
     val mem_rrdy   = Input(Bool()) // 主存就绪
     val mem_rvalid = Input(Bool()) // 来自主存的数据有效
-    // hit
-    val hit = Output(Bool())
   })
   /* ---------- ---------- 初始化 output ---------- ---------- */
   io.inst_valid := false.B
   io.inst_out   := DontCare
   io.mem_ren    := 0.U
   io.mem_raddr  := DontCare
-  io.hit        := false.B
+  val hit = RegInit(false.B)
+  dontTouch(hit);
 
   /* ---------- ---------- 初始化 sram ---------- ---------- */
   val tagSrams  = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
@@ -73,9 +70,9 @@ class ICache(n: Int = 2) extends Module {
 
   /* ---------- ---------- victim ---------- ---------- */
 
-  val lru = Module(new LRU(n))
-  lru.io.hitVec := hitVec
-  val victim = lru.io.victim
+  val cnt = Counter(n)
+  cnt.inc()
+  val victim = cnt.value
 
   /* ---------- ---------- 状态机 ---------- ---------- */
   // 0 1 2
@@ -94,7 +91,7 @@ class ICache(n: Int = 2) extends Module {
         io.inst_valid := true.B
         io.inst_out   := dataOutVec(offset)
         state         := sIdle
-        io.hit        := true.B
+        hit           := true.B
       }.otherwise {
         state := sREFILL
       }
