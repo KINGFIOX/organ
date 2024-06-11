@@ -8,7 +8,7 @@ import scala.collection.immutable.Stream.Cons
 
 import memory.blk_mem_gen_1;
 
-class ICache(n: Int = 2) extends Module {
+class ICache(n: Int = 4) extends Module {
   require(isPow2(n))
   val io = IO(new Bundle {
     val inst_rreq  = Input(Bool()) // Instruction fetch signal
@@ -121,7 +121,7 @@ import _root_.circt.stage.ChiselStage
 
 object ICache extends App {
   ChiselStage.emitSystemVerilogFile(
-    new ICache(4),
+    new ICache,
     // args        = Array("--target", "verilog"),
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info")
   )

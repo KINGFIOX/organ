@@ -5,7 +5,9 @@ import chisel3.util._
 
 import common.Constants
 
-class DCache extends Module {
+import memory.blk_mem_gen_1
+
+class DCache(n: Int = 4) extends Module {
   val io = IO(new Bundle {
     // Interface to CPU
     val data_ren   = Input(UInt(Constants.CacheLine_Len.W))
@@ -53,18 +55,31 @@ class DCache extends Module {
   val nonAlign = (io.data_addr & "b011".U(Constants.Addr_Width.W)).orR
 
   /* ---------- ---------- sram ---------- ---------- */
-  import memory.blk_mem_gen_1
 
-  val tagSram = Module(new blk_mem_gen_1)
-  tagSram.io.addra := 0.U
-  tagSram.io.dina  := 0.U
-  tagSram.io.wea   := 0.U
-  tagSram.io.clka  := clock
-  val U_dsram = Module(new blk_mem_gen_1)
-  U_dsram.io.addra := 0.U
-  U_dsram.io.dina  := 0.U
-  U_dsram.io.wea   := 0.U
-  U_dsram.io.clka  := clock
+  val tagSrams  = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
+  val dataSrams = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
+
+// Configure each SRAM module
+  for (i <- 0 until n) {
+    tagSrams(i).dina := DontCare
+    tagSrams(i).wea  := false.B
+    tagSrams(i).clka := clock
+
+    dataSrams(i).dina := DontCare
+    dataSrams(i).wea  := false.B
+    dataSrams(i).clka := clock
+  }
+
+  // val tagSram = Module(new blk_mem_gen_1)
+  // tagSram.io.addra := 0.U
+  // tagSram.io.dina  := 0.U
+  // tagSram.io.wea   := 0.U
+  // tagSram.io.clka  := clock
+  // val U_dsram = Module(new blk_mem_gen_1)
+  // U_dsram.io.addra := 0.U
+  // U_dsram.io.dina  := 0.U
+  // U_dsram.io.wea   := 0.U
+  // U_dsram.io.clka  := clock
 
   /* ---------- ---------- addr 划分 ---------- ---------- */
 
@@ -74,10 +89,26 @@ class DCache extends Module {
 
   /* ---------- ---------- sram 数据通路 ---------- ---------- */
 
-  tagSram.io.addra := index
-  U_dsram.io.addra := index
+  val hitVec = WireInit(VecInit(Seq.fill(n)(false.B)))
 
-  val sram_valid_tag_out = tagSram.io.douta(Constants.Tag_Width, 0)
+  val hit_i = WireInit(0.U(log2Ceil(n).W))
+  for (i <- 0 until n) {
+    tagSrams(i).addra  := index
+    dataSrams(i).addra := index
+    when(tagSrams(i).douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) { // 只有命中了，才会走下面这个流程
+      hitVec(i) := true.B
+      hit_i     := i.asUInt
+    }
+  }
+
+  // tagSram.io.addra := index
+  // U_dsram.io.addra := index
+
+  /* ---------- ---------- victim ---------- ---------- */
+
+  val cnt = Counter(n)
+  cnt.inc()
+  val victim = cnt.value
 
   /* ---------- read ---------- */
 
@@ -113,9 +144,9 @@ class DCache extends Module {
       }
     }
     is(r_CHECK) {
-      when(sram_valid_tag_out === Cat(1.U(1.W), tag)) { /* hit */
+      when(hitVec.asUInt =/= 0.U) { /* hit */
         io.data_valid := true.B
-        val line = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+        val line = dataSrams(hit_i).douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
         io.data_rdata := line(offset)
         r_state       := r_IDLE
         hit_r         := true.B
@@ -130,10 +161,10 @@ class DCache extends Module {
     is(r_REFILL1) {
       when(io.dev_rvalid) {
         /* 更新 cache */
-        tagSram.io.wea  := true.B
-        tagSram.io.dina := Cat(1.U, tag)
-        U_dsram.io.wea  := true.B
-        U_dsram.io.dina := io.dev_rdata
+        tagSrams(victim).wea   := true.B
+        tagSrams(victim).dina  := Cat(1.U, tag)
+        dataSrams(victim).wea  := true.B
+        dataSrams(victim).dina := io.dev_rdata
 
         /* 状态 */
         r_state := r_CHECK
@@ -167,12 +198,12 @@ class DCache extends Module {
         io.dev_waddr := io.data_addr
         io.dev_wdata := wdata
         w_state      := w_STAT1
-        when(~uncached && ~nonAlign && sram_valid_tag_out === Cat(1.U(1.W), tag)) { /* cacheline 直接作废 */
-          val line = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-          line(offset)    := wdata
-          U_dsram.io.wea  := true.B
-          U_dsram.io.dina := line.asUInt
-          hit_w           := true.B
+        when(~uncached && ~nonAlign && hitVec.asUInt =/= 0.U) { /* cacheline 直接作废 */
+          val line = dataSrams(hit_i).douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+          line(offset)          := wdata
+          dataSrams(hit_i).wea  := true.B
+          dataSrams(hit_i).dina := line.asUInt
+          hit_w                 := true.B
         }
       }
     }
