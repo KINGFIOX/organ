@@ -1,3 +1,5 @@
+package cache;
+
 import chisel3._
 import chisel3.util._
 
@@ -24,7 +26,6 @@ class DCache extends Module {
     val dev_raddr  = Output(UInt(Constants.Addr_Width.W))
     val dev_rvalid = Input(Bool())
     val dev_rdata  = Input(UInt(Constants.CacheLine_Width.W)) // Assuming `BLK_SIZE = 4 * 32`
-    // val uncached   = Output(Bool())
   })
 
   /* ---------- ---------- init ---------- ---------- */
@@ -41,14 +42,11 @@ class DCache extends Module {
   io.dev_raddr := 0.U
 
   val hit_r = WireInit(false.B)
-  dontTouch(hit_r)
   val hit_w = WireInit(false.B)
-  dontTouch(hit_w)
 
   /* ---------- ---------- addr ---------- ---------- */
 
   val uncached = Mux((io.data_addr(31, 16) === "hffff".U(16.W)) & (io.data_ren =/= 0.U | io.data_wen =/= 0.U), true.B, false.B)
-  dontTouch(uncached)
   val nonAlign = (io.data_addr & "b011".U(Constants.Addr_Width.W)).orR
 
   /* ---------- ---------- sram ---------- ---------- */
