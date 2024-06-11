@@ -3,9 +3,7 @@ import chisel3.util._
 
 import common.Constants
 
-import memory.blk_mem_gen_1
-
-class DCache(n: Int = 2) extends Module {
+class DCache extends Module {
   val io = IO(new Bundle {
     // Interface to CPU
     val data_ren   = Input(UInt(Constants.CacheLine_Len.W))
@@ -26,9 +24,7 @@ class DCache(n: Int = 2) extends Module {
     val dev_raddr  = Output(UInt(Constants.Addr_Width.W))
     val dev_rvalid = Input(Bool())
     val dev_rdata  = Input(UInt(Constants.CacheLine_Width.W)) // Assuming `BLK_SIZE = 4 * 32`
-    val hit_r      = Output(Bool())
-    val hit_w      = Output(Bool())
-    val uncached   = Output(Bool())
+    // val uncached   = Output(Bool())
   })
 
   /* ---------- ---------- init ---------- ---------- */
@@ -44,29 +40,30 @@ class DCache(n: Int = 2) extends Module {
   io.dev_ren   := 0.U
   io.dev_raddr := 0.U
 
-  io.hit_r := 0.U
-  io.hit_w := 0.U
+  val hit_r = WireInit(false.B)
+  dontTouch(hit_r)
+  val hit_w = WireInit(false.B)
+  dontTouch(hit_w)
 
   /* ---------- ---------- addr ---------- ---------- */
 
-  io.uncached := Mux((io.data_addr(31, 16) === "hffff".U(16.W)) & (io.data_ren =/= 0.U | io.data_wen =/= 0.U), true.B, false.B)
+  val uncached = Mux((io.data_addr(31, 16) === "hffff".U(16.W)) & (io.data_ren =/= 0.U | io.data_wen =/= 0.U), true.B, false.B)
+  dontTouch(uncached)
   val nonAlign = (io.data_addr & "b011".U(Constants.Addr_Width.W)).orR
 
   /* ---------- ---------- sram ---------- ---------- */
+  import memory.blk_mem_gen_1
 
-  val tagSrams  = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
-  val dataSrams = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
-
-// Configure each SRAM module
-  for (i <- 0 until n) {
-    tagSrams(i).dina := DontCare
-    tagSrams(i).wea  := false.B
-    tagSrams(i).clka := clock
-
-    dataSrams(i).dina := DontCare
-    dataSrams(i).wea  := false.B
-    dataSrams(i).clka := clock
-  }
+  val tagSram = Module(new blk_mem_gen_1)
+  tagSram.io.addra := 0.U
+  tagSram.io.dina  := 0.U
+  tagSram.io.wea   := 0.U
+  tagSram.io.clka  := clock
+  val U_dsram = Module(new blk_mem_gen_1)
+  U_dsram.io.addra := 0.U
+  U_dsram.io.dina  := 0.U
+  U_dsram.io.wea   := 0.U
+  U_dsram.io.clka  := clock
 
   /* ---------- ---------- addr 划分 ---------- ---------- */
 
@@ -75,27 +72,17 @@ class DCache(n: Int = 2) extends Module {
   val offset = io.data_addr(Constants.Offset_up, Constants.Offset_down)
 
   /* ---------- ---------- sram 数据通路 ---------- ---------- */
-  val dcacheOutVec = VecInit(Seq.fill(Constants.CacheLine_Len)(0.U(Constants.Word_Width.W)))
 
-  /* ---------- cache ---------- */
-  val hitVec = WireInit(VecInit(Seq.fill(n)(false.B)))
+  tagSram.io.addra := index
+  U_dsram.io.addra := index
 
-  val hitIndex = RegInit(0.U(log2Ceil(n).W))
-  for (i <- 0 until n) {
-    tagSrams(i).addra  := index
-    dataSrams(i).addra := index
-    when(tagSrams(i).douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) {
-      hitVec(i)    := true.B
-      dcacheOutVec := dataSrams(i).douta.asTypeOf(dcacheOutVec)
-      hitIndex     := i.U
-    }
-  }
+  val sram_valid_tag_out = tagSram.io.douta(Constants.Tag_Width, 0)
 
-  /* ---------- ---------- victim ---------- ---------- */
+  val dcacheOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+  dcacheOutVec := U_dsram.io.douta.asTypeOf(dcacheOutVec)
 
-  val cnt = Counter(n)
-  cnt.inc()
-  val victim = cnt.value
+  val dataInVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+  dataInVec := U_dsram.io.dina.asTypeOf(dataInVec)
 
   /* ---------- read ---------- */
 
@@ -108,7 +95,7 @@ class DCache(n: Int = 2) extends Module {
     is(r_IDLE) {
       when(io.data_ren =/= 0.U) {
         ren_r := io.data_ren
-        when(io.uncached || nonAlign) { /* 直接访问主存 */
+        when(uncached || nonAlign) { /* 直接访问主存 */
           r_state := r_NOCACHE0
         }.otherwise { /* 访问 cache */
           r_state := r_CHECK
@@ -131,11 +118,11 @@ class DCache(n: Int = 2) extends Module {
       }
     }
     is(r_CHECK) {
-      when(hitVec.asUInt.orR) { /* hit */
+      when(sram_valid_tag_out === Cat(1.U(1.W), tag)) { /* hit */
         io.data_valid := true.B
         io.data_rdata := dcacheOutVec(offset)
         r_state       := r_IDLE
-        io.hit_r      := true.B
+        hit_r         := true.B
       }.otherwise { /* miss -> refill */
         when(io.dev_rrdy) {
           io.dev_ren   := "b1111".U(4.W)
@@ -147,10 +134,10 @@ class DCache(n: Int = 2) extends Module {
     is(r_REFILL1) {
       when(io.dev_rvalid) {
         /* 更新 cache */
-        tagSrams(victim).wea   := true.B
-        tagSrams(victim).dina  := Cat(1.U, tag)
-        dataSrams(victim).wea  := true.B
-        dataSrams(victim).dina := io.dev_rdata
+        tagSram.io.wea  := true.B
+        tagSram.io.dina := Cat(1.U, tag)
+        U_dsram.io.wea  := true.B
+        U_dsram.io.dina := io.dev_rdata
 
         /* 状态 */
         r_state := r_CHECK
@@ -184,12 +171,12 @@ class DCache(n: Int = 2) extends Module {
         io.dev_waddr := io.data_addr
         io.dev_wdata := wdata
         w_state      := w_STAT1
-        when(~io.uncached && ~nonAlign && hitVec.asUInt.orR) { /* cacheline 直接作废 */
-          val line = dataSrams(hitIndex).douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-          line(offset)             := wdata
-          dataSrams(hitIndex).wea  := true.B
-          dataSrams(hitIndex).dina := line.asUInt
-          io.hit_w                 := true.B
+        when(~uncached && ~nonAlign && sram_valid_tag_out === Cat(1.U(1.W), tag)) { /* cacheline 直接作废 */
+          val line = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+          line(offset)    := wdata
+          U_dsram.io.wea  := true.B
+          U_dsram.io.dina := line.asUInt
+          hit_w           := true.B
         }
       }
     }
@@ -207,7 +194,7 @@ import _root_.circt.stage.ChiselStage
 
 object DCache extends App {
   ChiselStage.emitSystemVerilogFile(
-    new DCache(4),
+    new DCache,
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info")
   )
 }
