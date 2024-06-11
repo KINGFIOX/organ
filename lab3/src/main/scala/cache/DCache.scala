@@ -79,12 +79,6 @@ class DCache extends Module {
 
   val sram_valid_tag_out = tagSram.io.douta(Constants.Tag_Width, 0)
 
-  val dcacheOutVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-  dcacheOutVec := U_dsram.io.douta.asTypeOf(dcacheOutVec)
-
-  val dataInVec = Wire(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-  dataInVec := U_dsram.io.dina.asTypeOf(dataInVec)
-
   /* ---------- read ---------- */
 
   val r_IDLE :: r_NOCACHE0 /* 发送请求 */ :: r_NOCACHE1 /* 准备接受 */ :: r_CHECK :: r_REFILL1 :: Nil = Enum(5)
@@ -121,7 +115,8 @@ class DCache extends Module {
     is(r_CHECK) {
       when(sram_valid_tag_out === Cat(1.U(1.W), tag)) { /* hit */
         io.data_valid := true.B
-        io.data_rdata := dcacheOutVec(offset)
+        val line = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+        io.data_rdata := line(offset)
         r_state       := r_IDLE
         hit_r         := true.B
       }.otherwise { /* miss -> refill */
