@@ -34,28 +34,32 @@ module DCache(
   wire             _GEN_2 = r_state == 3'h2;
   wire             _GEN_3 = r_state == 3'h3;
   wire             _GEN_4 = _tagSram_douta[23:0] == {1'h1, io_data_addr[31:9]};
-  wire             _GEN_5 = _GEN_0 | _GEN_1;
-  wire [3:0][31:0] _GEN_6 =
+  wire             _GEN_5 = _GEN_3 & _GEN_4;
+  wire             _GEN_6 = _GEN_0 | _GEN_1;
+  wire [3:0][31:0] _GEN_7 =
     {{_U_dsram_douta[127:96]},
      {_U_dsram_douta[95:64]},
      {_U_dsram_douta[63:32]},
      {_U_dsram_douta[31:0]}};
-  wire             _GEN_7 = r_state == 3'h4;
-  wire             _GEN_8 = _GEN_0 | _GEN_1 | _GEN_2 | _GEN_3;
-  wire             _GEN_9 = ~_GEN_8 & _GEN_7 & io_dev_rvalid;
-  wire             _GEN_10 = _GEN_7 & io_dev_rvalid;
-  wire             _GEN_11 = _GEN_8 | ~_GEN_10;
+  wire             hit_r = ~(_GEN_0 | _GEN_1 | _GEN_2) & _GEN_5;
+  wire             _GEN_8 = r_state == 3'h4;
+  wire             _GEN_9 = _GEN_0 | _GEN_1 | _GEN_2 | _GEN_3;
+  wire             _GEN_10 = ~_GEN_9 & _GEN_8 & io_dev_rvalid;
+  wire             _GEN_11 = _GEN_8 & io_dev_rvalid;
+  wire             _GEN_12 = _GEN_9 | ~_GEN_11;
   reg  [1:0]       w_state;
   reg  [3:0]       wen_r;
   reg  [31:0]      wdata;
   reg              wr_resp_REG;
   wire             wr_resp = ~wr_resp_REG & io_dev_wrdy;
-  wire             _GEN_12 = w_state == 2'h0;
-  wire             _GEN_13 = w_state == 2'h1;
-  wire             _GEN_14 = _GEN_12 | ~(_GEN_13 & io_dev_wrdy);
-  wire             _GEN_15 =
-    _GEN_13 & io_dev_wrdy & ~uncached & ~(|(io_data_addr[1:0])) & _GEN_4;
-  wire             _GEN_16 = w_state == 2'h2;
+  wire             _GEN_13 = w_state == 2'h0;
+  wire             _GEN_14 = w_state == 2'h1;
+  wire             _GEN_15 = _GEN_14 & io_dev_wrdy;
+  wire             _GEN_16 = _GEN_13 | ~_GEN_15;
+  wire             _GEN_17 = ~uncached & ~(|(io_data_addr[1:0])) & _GEN_4;
+  wire             _GEN_18 = _GEN_14 & io_dev_wrdy & _GEN_17;
+  wire             hit_w = ~_GEN_13 & _GEN_15 & _GEN_17;
+  wire             _GEN_19 = w_state == 2'h2;
   always @(posedge clock) begin
     if (reset) begin
       r_state <= 3'h0;
@@ -83,21 +87,21 @@ module DCache(
         else if (io_dev_rrdy)
           r_state <= 3'h4;
       end
-      else if (_GEN_10)
+      else if (_GEN_11)
         r_state <= 3'h3;
       if (_GEN_0 & (|io_data_ren))
         ren_r <= io_data_ren;
-      if (_GEN_12) begin
+      if (_GEN_13) begin
         if (|io_data_wen)
           w_state <= 2'h1;
       end
-      else if (_GEN_13) begin
+      else if (_GEN_14) begin
         if (io_dev_wrdy)
           w_state <= 2'h2;
       end
-      else if (_GEN_16 & wr_resp)
+      else if (_GEN_19 & wr_resp)
         w_state <= 2'h0;
-      if (_GEN_12 & (|io_data_wen)) begin
+      if (_GEN_13 & (|io_data_wen)) begin
         wen_r <= io_data_wen;
         wdata <= io_data_wdata;
       end
@@ -106,35 +110,35 @@ module DCache(
   end // always @(posedge)
   blk_mem_gen_1 tagSram (
     .clka  (clock),
-    .wea   (_GEN_9),
+    .wea   (_GEN_10),
     .addra (_GEN),
-    .dina  (_GEN_11 ? 128'h0 : {105'h1, io_data_addr[31:9]}),
+    .dina  (_GEN_12 ? 128'h0 : {105'h1, io_data_addr[31:9]}),
     .douta (_tagSram_douta)
   );
   blk_mem_gen_1 U_dsram (
     .clka  (clock),
-    .wea   (~_GEN_12 & _GEN_15 | _GEN_9),
+    .wea   (~_GEN_13 & _GEN_18 | _GEN_10),
     .addra (_GEN),
     .dina
-      (_GEN_12 | ~_GEN_15
-         ? (_GEN_11 ? 128'h0 : io_dev_rdata)
+      (_GEN_13 | ~_GEN_18
+         ? (_GEN_12 ? 128'h0 : io_dev_rdata)
          : {(&(io_data_addr[3:2])) ? wdata : _U_dsram_douta[127:96],
             io_data_addr[3:2] == 2'h2 ? wdata : _U_dsram_douta[95:64],
             io_data_addr[3:2] == 2'h1 ? wdata : _U_dsram_douta[63:32],
             io_data_addr[3:2] == 2'h0 ? wdata : _U_dsram_douta[31:0]}),
     .douta (_U_dsram_douta)
   );
-  assign io_data_valid = ~_GEN_5 & (_GEN_2 ? io_dev_rvalid : _GEN_3 & _GEN_4);
+  assign io_data_valid = ~_GEN_6 & (_GEN_2 ? io_dev_rvalid : _GEN_5);
   assign io_data_rdata =
-    _GEN_5
+    _GEN_6
       ? 32'h0
       : _GEN_2
           ? (io_dev_rvalid ? io_dev_rdata[31:0] : 32'h0)
-          : _GEN_3 & _GEN_4 ? _GEN_6[io_data_addr[3:2]] : 32'h0;
-  assign io_data_wresp = ~(_GEN_12 | _GEN_13) & _GEN_16 & wr_resp;
-  assign io_dev_wen = _GEN_14 ? 4'h0 : wen_r;
-  assign io_dev_waddr = _GEN_14 ? 32'h0 : io_data_addr;
-  assign io_dev_wdata = _GEN_14 ? 32'h0 : wdata;
+          : _GEN_3 & _GEN_4 ? _GEN_7[io_data_addr[3:2]] : 32'h0;
+  assign io_data_wresp = ~(_GEN_13 | _GEN_14) & _GEN_19 & wr_resp;
+  assign io_dev_wen = _GEN_16 ? 4'h0 : wen_r;
+  assign io_dev_waddr = _GEN_16 ? 32'h0 : io_data_addr;
+  assign io_dev_wdata = _GEN_16 ? 32'h0 : wdata;
   assign io_dev_ren =
     _GEN_0
       ? 4'h0
