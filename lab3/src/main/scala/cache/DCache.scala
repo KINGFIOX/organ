@@ -7,7 +7,7 @@ import common.Constants
 
 import memory.blk_mem_gen_1
 
-class DCache extends Module {
+class DCache(n: Int = 4) extends Module {
   val io = IO(new Bundle {
     // Interface to CPU
     val data_ren   = Input(UInt(Constants.CacheLine_Len.W))
@@ -57,18 +57,19 @@ class DCache extends Module {
   val nonAlign = (io.data_addr & "b011".U(Constants.Addr_Width.W)).orR
 
   /* ---------- ---------- sram ---------- ---------- */
-  import memory.blk_mem_gen_1
+  val tagSrams  = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
+  val dataSrams = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
 
-  val tagSram = Module(new blk_mem_gen_1)
-  tagSram.io.addra := 0.U
-  tagSram.io.dina  := 0.U
-  tagSram.io.wea   := 0.U
-  tagSram.io.clka  := clock
-  val U_dsram = Module(new blk_mem_gen_1)
-  U_dsram.io.addra := 0.U
-  U_dsram.io.dina  := 0.U
-  U_dsram.io.wea   := 0.U
-  U_dsram.io.clka  := clock
+// Configure each SRAM module
+  for (i <- 0 until n) {
+    tagSrams(i).dina := DontCare
+    tagSrams(i).wea  := false.B
+    tagSrams(i).clka := clock
+
+    dataSrams(i).dina := DontCare
+    dataSrams(i).wea  := false.B
+    dataSrams(i).clka := clock
+  }
 
   /* ---------- ---------- addr 划分 ---------- ---------- */
 
@@ -78,12 +79,25 @@ class DCache extends Module {
 
   /* ---------- ---------- sram 数据通路 ---------- ---------- */
 
-  tagSram.io.addra := index
-  U_dsram.io.addra := index
+  val hitVec = WireInit(VecInit(Seq.fill(n)(false.B)))
 
-  val is_hit   = tagSram.io.douta(Constants.Tag_Width - 1, 0) === tag
-  val is_valid = tagSram.io.douta(Constants.Tag_Width)
-  val is_dirty = tagSram.io.douta(Constants.Tag_Width + 1)
+  val is_dirty = WireInit(false.B)
+
+  val hit_i = WireInit(0.U(log2Ceil(n).W))
+  for (i <- 0 until n) {
+    tagSrams(i).addra  := index
+    dataSrams(i).addra := index
+    when(tagSrams(i).douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) { // 只有命中了，才会走下面这个流程
+      hitVec(i) := true.B
+      hit_i     := i.asUInt
+      is_dirty  := tagSrams(i).douta(Constants.Tag_Width + 1)
+    }
+  }
+
+  /* ---------- ---------- victim ---------- ---------- */
+
+  val victim_cnt = Counter(n)
+  victim_cnt.inc()
 
   /* ---------- read ---------- */
 
@@ -96,6 +110,8 @@ class DCache extends Module {
   /* write 计数器 */
   val r_cnt = Counter(Constants.CacheLine_Len)
   dontTouch(r_cnt.value)
+
+  val r_victim = RegInit(0.U(log2Ceil(n).W))
 
   switch(r_state) {
     is(r_IDLE) { // 0
@@ -124,14 +140,15 @@ class DCache extends Module {
       }
     }
     is(r_CHECK) { // 3
-      when(is_hit && is_valid) { /* hit */
+      when(hitVec.asUInt =/= 0.U) { /* hit */
         hit_r := true.B
-        val line = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+        val line = dataSrams(hit_i).douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
         io.data_rdata := line(offset)
         io.data_valid := true.B
         r_state       := r_IDLE
-      }.otherwise { /* miss -> refill */
-        when(is_dirty && is_valid) { /* 脏数据，写回，然后再载入 */
+      }.otherwise { /* miss */
+        r_victim := victim_cnt.value
+        when(is_dirty) { /* 脏数据，写回，然后再载入 */
           r_state := r_WRITEBACK0
         }.otherwise { /* 不是脏数据，那么直接载入 */
           r_state := r_CLEAN_REFILL0
@@ -148,10 +165,10 @@ class DCache extends Module {
     is(r_CLEAN_REFILL1) { // 5
       when(io.dev_rvalid) {
         /* 更新 cache */
-        tagSram.io.wea  := true.B
-        tagSram.io.dina := Cat(0.U, 1.U, tag)
-        U_dsram.io.wea  := true.B
-        U_dsram.io.dina := io.dev_rdata
+        tagSrams(r_victim).wea   := true.B
+        tagSrams(r_victim).dina  := Cat(0.U, 1.U, tag)
+        dataSrams(r_victim).wea  := true.B
+        dataSrams(r_victim).dina := io.dev_rdata
 
         /* 对外返回响应 */
         val line = io.dev_rdata.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
@@ -168,8 +185,8 @@ class DCache extends Module {
       }.otherwise {
         when(io.dev_wrdy) { /* write back */
           /* 定义临时变量 */
-          val waddr = Cat(tag, index, r_cnt.value(Constants.Offset_Width - 1, 0), 0.U(Constants.Word_Align.W)) /* 合成地址 */
-          val line  = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+          val waddr /* 写回原来的地址 */ = Cat(tagSrams(r_victim).douta(Constants.Tag_Width - 1, 0), index, r_cnt.value(Constants.Offset_Width - 1, 0), 0.U(Constants.Word_Align.W)) /* 合成地址 */
+          val line                = dataSrams(r_victim).douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
 
           /* trigger */
           io.dev_wen   := "b1111".U(4.W)
@@ -196,10 +213,10 @@ class DCache extends Module {
     }
     is(r_DIRTY_REFILL1) { // 9
       when(io.dev_rvalid) {
-        tagSram.io.wea  := true.B
-        tagSram.io.dina := Cat(1.U, 1.U, tag)
-        U_dsram.io.wea  := true.B
-        U_dsram.io.dina := io.dev_rdata
+        tagSrams(r_victim).wea   := true.B
+        tagSrams(r_victim).dina  := Cat(1.U, 1.U, tag)
+        dataSrams(r_victim).wea  := true.B
+        dataSrams(r_victim).dina := io.dev_rdata
 
         /* 响应, 状态 */
         io.data_rdata := io.dev_rdata
@@ -221,6 +238,8 @@ class DCache extends Module {
   /* write 计数器 */
   val w_cnt = Counter(Constants.CacheLine_Len)
   dontTouch(w_cnt.value)
+
+  val w_victim = RegInit(0.U(log2Ceil(n).W))
 
   /* 状态机 */
   switch(w_state) {
@@ -250,20 +269,21 @@ class DCache extends Module {
       }
     }
     is(w_TAG_CHECK) { // 3
-      when(is_hit && is_valid) { /* 命中了 */
-        tagSram.io.wea  := true.B
-        tagSram.io.dina := Cat(1.U, 1.U, tag)
-        U_dsram.io.wea  := true.B
-        val line = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-        line(offset)    := wdata
-        U_dsram.io.dina := line.asUInt
-        hit_w           := true.B
+      when(hitVec.asUInt =/= 0.U) { /* 命中了 */
+        tagSrams(hit_i).wea  := true.B
+        tagSrams(hit_i).dina := Cat(1.U, 1.U, tag)
+        dataSrams(hit_i).wea := true.B
+        val line = dataSrams(hit_i).douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+        line(offset)          := wdata
+        dataSrams(hit_i).dina := line.asUInt
+        hit_w                 := true.B
 
         /* 响应, 状态 */
         io.data_wresp := true.B
         w_state       := w_IDLE
       }.otherwise { /* 没命中 */
-        when(is_dirty && is_valid) { /* 脏数据，写回，然后再载入 */
+        w_victim := victim_cnt.value
+        when(is_dirty) { /* 脏数据，写回，然后再载入 */
           w_state := w_WRITEBACK0
         }.otherwise { /* 不是脏数据，那么直接载入 */
           w_state := w_CLEAN_REFILL0
@@ -280,12 +300,12 @@ class DCache extends Module {
     is(w_CLEAN_REFILL1) { // 5
       io.dev_ren := 0.U
       when(io.dev_rvalid) {
-        tagSram.io.wea  := true.B
-        tagSram.io.dina := Cat(1.U, 1.U, tag)
-        U_dsram.io.wea  := true.B
+        tagSrams(w_victim).wea  := true.B
+        tagSrams(w_victim).dina := Cat(1.U, 1.U, tag)
+        dataSrams(w_victim).wea := true.B
         val line = io.dev_rdata.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-        line(offset)    := wdata
-        U_dsram.io.dina := line.asUInt
+        line(offset)             := wdata
+        dataSrams(w_victim).dina := line.asUInt
 
         /* 响应, 状态 */
         io.data_wresp := true.B
@@ -298,8 +318,8 @@ class DCache extends Module {
       }.otherwise {
         when(io.dev_wrdy) { /* write back */
           /* 定义临时变脸 */
-          val waddr = Cat(tag, index, w_cnt.value(Constants.Offset_Width - 1, 0), 0.U(Constants.Word_Align.W)) /* 合成地址 */
-          val line  = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+          val waddr = Cat(tagSrams(w_victim).douta(Constants.Tag_Width - 1, 0), index, w_cnt.value(Constants.Offset_Width - 1, 0), 0.U(Constants.Word_Align.W)) /* 合成地址 */
+          val line  = dataSrams(w_victim).douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
 
           /* trigger */
           io.dev_wen   := "b1111".U(4.W)
@@ -327,11 +347,11 @@ class DCache extends Module {
     is(w_DIRTY_REFILL1) { // 9
       when(io.dev_rvalid) {
         val line = io.dev_rdata.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-        line(offset)    := wdata
-        tagSram.io.wea  := true.B
-        tagSram.io.dina := Cat(1.U, 1.U, tag)
-        U_dsram.io.wea  := true.B
-        U_dsram.io.dina := line.asUInt
+        line(offset)             := wdata
+        tagSrams(w_victim).wea   := true.B
+        tagSrams(w_victim).dina  := Cat(1.U, 1.U, tag)
+        dataSrams(w_victim).wea  := true.B
+        dataSrams(w_victim).dina := line.asUInt
 
         /* 响应, 状态 */
         io.data_wresp := true.B
