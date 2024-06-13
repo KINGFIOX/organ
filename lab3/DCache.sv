@@ -22,202 +22,344 @@ module DCache(
   input  [127:0] io_dev_rdata
 );
 
-  wire [127:0]      _blk_mem_gen_1_7_douta;
-  wire [127:0]      _blk_mem_gen_1_6_douta;
-  wire [127:0]      _blk_mem_gen_1_5_douta;
-  wire [127:0]      _blk_mem_gen_1_4_douta;
-  wire [127:0]      _blk_mem_gen_1_3_douta;
-  wire [127:0]      _blk_mem_gen_1_2_douta;
-  wire [127:0]      _blk_mem_gen_1_1_douta;
-  wire [127:0]      _blk_mem_gen_1_douta;
-  wire              uncached =
+  wire [127:0]     _U_dsram_douta;
+  wire [127:0]     _tagSram_douta;
+  reg              wr_resp_REG;
+  wire             wr_resp = ~wr_resp_REG & io_dev_wrdy;
+  wire             uncached =
     (&(io_data_addr[31:16])) & ((|io_data_ren) | (|io_data_wen));
-  wire [5:0]        tagSrams_3_addra = {1'h0, io_data_addr[8:4]};
-  wire [23:0]       _tagSrams_dina_T = {1'h1, io_data_addr[31:9]};
-  wire              hitVec_1 = _blk_mem_gen_1_1_douta[23:0] == _tagSrams_dina_T;
-  wire              hitVec_2 = _blk_mem_gen_1_2_douta[23:0] == _tagSrams_dina_T;
-  wire              hitVec_3 = _blk_mem_gen_1_3_douta[23:0] == _tagSrams_dina_T;
-  wire [1:0]        hit_i = hitVec_3 ? 2'h3 : hitVec_2 ? 2'h2 : {1'h0, hitVec_1};
-  reg  [1:0]        cnt_value;
-  reg  [2:0]        r_state;
-  reg  [3:0]        ren_r;
-  wire              _GEN = r_state == 3'h0;
-  wire              _GEN_0 = r_state == 3'h1;
-  wire              _GEN_1 = r_state == 3'h2;
-  wire              _GEN_2 = r_state == 3'h3;
-  wire [3:0]        _GEN_3 =
-    {hitVec_3, hitVec_2, hitVec_1, _blk_mem_gen_1_douta[23:0] == _tagSrams_dina_T};
-  wire              _GEN_4 = _GEN_2 & (|_GEN_3);
-  wire              _GEN_5 = _GEN | _GEN_0;
-  wire [3:0][127:0] _GEN_6 =
-    {{_blk_mem_gen_1_7_douta},
-     {_blk_mem_gen_1_6_douta},
-     {_blk_mem_gen_1_5_douta},
-     {_blk_mem_gen_1_4_douta}};
-  wire [3:0][31:0]  _GEN_7 =
-    {{_GEN_6[hit_i][127:96]},
-     {_GEN_6[hit_i][95:64]},
-     {_GEN_6[hit_i][63:32]},
-     {_GEN_6[hit_i][31:0]}};
-  wire              hit_r = ~(_GEN | _GEN_0 | _GEN_1) & _GEN_4;
-  wire              _GEN_8 = r_state == 3'h4 & io_dev_rvalid;
-  wire              _GEN_9 = _GEN | _GEN_0 | _GEN_1 | _GEN_2;
-  wire              tagSrams_0_wea = ~_GEN_9 & _GEN_8 & cnt_value == 2'h0;
-  wire              tagSrams_1_wea = ~_GEN_9 & _GEN_8 & cnt_value == 2'h1;
-  wire              tagSrams_2_wea = ~_GEN_9 & _GEN_8 & cnt_value == 2'h2;
-  wire              tagSrams_3_wea = ~_GEN_9 & _GEN_8 & (&cnt_value);
-  wire [127:0]      tagSrams_3_dina = {105'h1, io_data_addr[31:9]};
-  reg  [1:0]        w_state;
-  reg  [3:0]        wen_r;
-  reg  [31:0]       wdata;
-  reg               wr_resp_REG;
-  wire              wr_resp = ~wr_resp_REG & io_dev_wrdy;
-  wire              _GEN_10 = w_state == 2'h0;
-  wire              _GEN_11 = w_state == 2'h1;
-  wire              _GEN_12 = _GEN_11 & io_dev_wrdy;
-  wire              _GEN_13 = _GEN_10 | ~_GEN_12;
-  wire              _GEN_14 = ~uncached & ~(|(io_data_addr[1:0])) & (|_GEN_3);
-  wire              _GEN_15 = _GEN_11 & io_dev_wrdy & _GEN_14 & hit_i == 2'h0;
-  wire              _GEN_16 = _GEN_11 & io_dev_wrdy & _GEN_14 & hit_i == 2'h1;
-  wire              _GEN_17 = _GEN_11 & io_dev_wrdy & _GEN_14 & hit_i == 2'h2;
-  wire              _GEN_18 = _GEN_11 & io_dev_wrdy & _GEN_14 & (&hit_i);
-  wire [127:0]      _dataSrams_dina_T =
-    {(&(io_data_addr[3:2])) ? wdata : _GEN_6[hit_i][127:96],
-     io_data_addr[3:2] == 2'h2 ? wdata : _GEN_6[hit_i][95:64],
-     io_data_addr[3:2] == 2'h1 ? wdata : _GEN_6[hit_i][63:32],
-     io_data_addr[3:2] == 2'h0 ? wdata : _GEN_6[hit_i][31:0]};
-  wire              hit_w = ~_GEN_10 & _GEN_12 & _GEN_14;
-  wire              _GEN_19 = w_state == 2'h2;
+  wire [5:0]       _GEN = {1'h0, io_data_addr[8:4]};
+  reg  [3:0]       r_state;
+  reg  [3:0]       ren_r;
+  reg  [1:0]       r_cnt_value;
+  wire             _GEN_0 = r_state == 4'h0;
+  wire             _GEN_1 = r_state == 4'h1;
+  wire             _GEN_2 = r_state == 4'h2;
+  wire             _GEN_3 = r_state == 4'h3;
+  wire             _GEN_4 =
+    _tagSram_douta[22:0] == io_data_addr[31:9] & _tagSram_douta[23];
+  wire             hit_r = ~(_GEN_0 | _GEN_1 | _GEN_2) & _GEN_3 & _GEN_4;
+  wire [3:0][31:0] _GEN_5 =
+    {{_U_dsram_douta[127:96]},
+     {_U_dsram_douta[95:64]},
+     {_U_dsram_douta[63:32]},
+     {_U_dsram_douta[31:0]}};
+  wire             _GEN_6 = r_state == 4'h4;
+  wire             _GEN_7 = r_state == 4'h5;
+  wire [3:0][31:0] _GEN_8 =
+    {{io_dev_rdata[127:96]},
+     {io_dev_rdata[95:64]},
+     {io_dev_rdata[63:32]},
+     {io_dev_rdata[31:0]}};
+  wire             _GEN_9 = r_state == 4'h6;
+  reg  [1:0]       REG;
+  wire             _GEN_10 = (&REG) & r_cnt_value == 2'h0;
+  wire [3:0]       _GEN_11 = {4{io_dev_wrdy}};
+  wire             _GEN_12 = _GEN_0 | _GEN_1 | _GEN_2 | _GEN_3 | _GEN_6 | _GEN_7;
+  wire             _GEN_13 = _GEN_12 | ~_GEN_9 | _GEN_10;
+  wire             _GEN_14 = _GEN_12 | ~_GEN_9 | _GEN_10 | ~io_dev_wrdy;
+  wire [31:0]      _GEN_15 = _GEN_14 ? 32'h0 : {io_data_addr[31:4], r_cnt_value, 2'h0};
+  wire [3:0][31:0] _GEN_16 =
+    {{_U_dsram_douta[127:96]},
+     {_U_dsram_douta[95:64]},
+     {_U_dsram_douta[63:32]},
+     {_U_dsram_douta[31:0]}};
+  wire [31:0]      _GEN_17 = _GEN_14 ? 32'h0 : _GEN_16[r_cnt_value];
+  wire             _GEN_18 = r_state == 4'h7;
+  wire             _GEN_19 = r_state == 4'h8;
+  wire             _GEN_20 = _GEN_19 & io_dev_rrdy;
+  wire [3:0]       _GEN_21 = {4{_GEN_20}};
+  wire             _GEN_22 = _GEN_7 | _GEN_9 | _GEN_18;
+  wire             _GEN_23 = _GEN_2 | _GEN_3;
+  wire [3:0]       _GEN_24 =
+    _GEN_0
+      ? 4'h0
+      : _GEN_1
+          ? (io_dev_rrdy ? ren_r : 4'h0)
+          : _GEN_23 ? 4'h0 : _GEN_6 ? {4{io_dev_rrdy}} : _GEN_22 ? 4'h0 : _GEN_21;
+  wire             _GEN_25 = _GEN_0 | _GEN_1;
+  wire             _GEN_26 = _GEN_25 | _GEN_23 | _GEN_6 | _GEN_22;
+  wire [31:0]      _io_dev_raddr_T_1 = {io_data_addr[31:4], 4'h0};
+  wire [31:0]      _GEN_27 =
+    _GEN_0
+      ? 32'h0
+      : _GEN_1
+          ? (io_dev_rrdy ? io_data_addr : 32'h0)
+          : _GEN_23
+              ? 32'h0
+              : _GEN_6
+                  ? (io_dev_rrdy ? {io_data_addr[31:4], 4'h0} : 32'h0)
+                  : _GEN_22 | ~_GEN_20 ? 32'h0 : _io_dev_raddr_T_1;
+  wire [31:0]      _GEN_28 = _GEN_26 | ~_GEN_20 ? 32'h0 : _io_dev_raddr_T_1;
+  wire             _GEN_29 = r_state == 4'h9;
+  wire             _GEN_30 = _GEN_9 | _GEN_18 | _GEN_19;
+  wire             _GEN_31 = (_GEN_7 | ~_GEN_30 & _GEN_29) & io_dev_rvalid;
+  wire             _GEN_32 = _GEN_0 | _GEN_1 | _GEN_2 | _GEN_3 | _GEN_6;
+  wire             _GEN_33 = ~_GEN_32 & _GEN_31;
+  wire [127:0]     _GEN_34 = {105'h3, io_data_addr[31:9]};
+  wire             _GEN_35 = _GEN_29 & io_dev_rvalid;
+  wire             _GEN_36 = _GEN_30 | ~_GEN_35;
+  wire [127:0]     _GEN_37 =
+    _GEN_32
+      ? 128'h0
+      : _GEN_7
+          ? (io_dev_rvalid ? {105'h1, io_data_addr[31:9]} : 128'h0)
+          : _GEN_36 ? 128'h0 : _GEN_34;
+  wire             _GEN_38 = _GEN_32 | _GEN_7 | _GEN_30 | ~_GEN_35;
+  wire [127:0]     _GEN_39 =
+    _GEN_32
+      ? 128'h0
+      : _GEN_7
+          ? (io_dev_rvalid ? io_dev_rdata : 128'h0)
+          : _GEN_36 ? 128'h0 : io_dev_rdata;
+  wire [127:0]     _GEN_40 = _GEN_38 ? 128'h0 : io_dev_rdata;
+  reg  [3:0]       w_state;
+  reg  [3:0]       wen_r;
+  reg  [31:0]      wdata;
+  reg  [1:0]       w_cnt_value;
+  wire             _GEN_41 = w_state == 4'h0;
+  wire             _GEN_42 = w_state == 4'h1;
+  wire             _GEN_43 = w_state == 4'h2;
+  wire             _GEN_44 = w_state == 4'h3;
+  wire             _GEN_45 = io_data_addr[3:2] == 2'h0;
+  wire             _GEN_46 = io_data_addr[3:2] == 2'h1;
+  wire             _GEN_47 = io_data_addr[3:2] == 2'h2;
+  wire             _GEN_48 = _GEN_41 | _GEN_42 | _GEN_43;
+  wire             hit_w = ~_GEN_48 & _GEN_44 & _GEN_4;
+  wire             _GEN_49 = w_state == 4'h4;
+  wire [3:0]       _GEN_50 = io_dev_rrdy ? 4'hF : _GEN_26 ? 4'h0 : _GEN_21;
+  wire             _GEN_51 = w_state == 4'h5;
+  wire             _GEN_52 = w_state == 4'h6;
+  reg  [1:0]       REG_1;
+  wire             _GEN_53 = (&REG_1) & w_cnt_value == 2'h0;
+  wire             _GEN_54 = _GEN_43 | _GEN_44 | _GEN_49 | _GEN_51;
+  wire             _GEN_55 = _GEN_54 | ~_GEN_52 | _GEN_53;
+  wire [3:0][31:0] _GEN_56 =
+    {{_U_dsram_douta[127:96]},
+     {_U_dsram_douta[95:64]},
+     {_U_dsram_douta[63:32]},
+     {_U_dsram_douta[31:0]}};
+  wire             _GEN_57 = w_state == 4'h7;
+  wire             _GEN_58 = w_state == 4'h8;
+  wire             _GEN_59 = _GEN_52 | _GEN_57;
+  wire             _GEN_60 = _GEN_41 | _GEN_42 | _GEN_43 | _GEN_44;
+  wire             _GEN_61 = w_state == 4'h9;
+  wire             _GEN_62 = _GEN_61 & io_dev_rvalid;
+  wire             _GEN_63 = _GEN_52 | _GEN_57 | _GEN_58;
+  wire             _GEN_64 =
+    _GEN_48
+      ? _GEN_33
+      : _GEN_44
+          ? _GEN_4 | _GEN_33
+          : _GEN_49
+              ? _GEN_33
+              : _GEN_51 ? io_dev_rvalid | _GEN_33 : ~_GEN_63 & _GEN_62 | _GEN_33;
+  wire             _GEN_65 = _GEN_63 | ~_GEN_61;
   always @(posedge clock) begin
+    wr_resp_REG <= io_dev_wrdy;
+    REG <= r_cnt_value;
+    REG_1 <= w_cnt_value;
     if (reset) begin
-      cnt_value <= 2'h0;
-      r_state <= 3'h0;
+      r_state <= 4'h0;
       ren_r <= 4'h0;
-      w_state <= 2'h0;
+      r_cnt_value <= 2'h0;
+      w_state <= 4'h0;
       wen_r <= 4'h0;
       wdata <= 32'h0;
+      w_cnt_value <= 2'h0;
     end
     else begin
-      cnt_value <= cnt_value + 2'h1;
-      if (_GEN) begin
+      automatic logic [3:0] _GEN_66;
+      automatic logic [3:0] _GEN_67;
+      _GEN_66 = {2'h0, ~(uncached | (|(io_data_addr[1:0]))), 1'h1};
+      _GEN_67 = _GEN_4 ? 4'h0 : {2'h1, _tagSram_douta[24] & _tagSram_douta[23], 1'h0};
+      if (_GEN_0) begin
         if (|io_data_ren)
-          r_state <= {1'h0, ~(uncached | (|(io_data_addr[1:0]))), 1'h1};
-      end
-      else if (_GEN_0) begin
-        if (io_dev_rrdy)
-          r_state <= 3'h2;
+          r_state <= _GEN_66;
       end
       else if (_GEN_1) begin
-        if (io_dev_rvalid)
-          r_state <= 3'h0;
+        if (io_dev_rrdy)
+          r_state <= 4'h2;
       end
       else if (_GEN_2) begin
-        if (|_GEN_3)
-          r_state <= 3'h0;
-        else if (io_dev_rrdy)
-          r_state <= 3'h4;
+        if (io_dev_rvalid)
+          r_state <= 4'h0;
       end
-      else if (_GEN_8)
-        r_state <= 3'h3;
-      if (_GEN & (|io_data_ren))
+      else if (_GEN_3)
+        r_state <= _GEN_67;
+      else if (_GEN_6) begin
+        if (io_dev_rrdy)
+          r_state <= 4'h5;
+      end
+      else if (_GEN_7) begin
+        if (io_dev_rvalid)
+          r_state <= 4'h0;
+      end
+      else if (_GEN_9) begin
+        if (_GEN_10)
+          r_state <= 4'h8;
+        else if (io_dev_wrdy)
+          r_state <= 4'h7;
+      end
+      else if (_GEN_18) begin
+        if (wr_resp)
+          r_state <= 4'h6;
+      end
+      else if (_GEN_19) begin
+        if (io_dev_rrdy)
+          r_state <= 4'h9;
+      end
+      else if (_GEN_35)
+        r_state <= 4'h0;
+      if (_GEN_0 & (|io_data_ren))
         ren_r <= io_data_ren;
-      if (_GEN_10) begin
+      if (_GEN_14) begin
+      end
+      else
+        r_cnt_value <= r_cnt_value + 2'h1;
+      if (_GEN_41) begin
         if (|io_data_wen)
-          w_state <= 2'h1;
+          w_state <= _GEN_66;
       end
-      else if (_GEN_11) begin
+      else if (_GEN_42) begin
         if (io_dev_wrdy)
-          w_state <= 2'h2;
+          w_state <= 4'h2;
       end
-      else if (_GEN_19 & wr_resp)
-        w_state <= 2'h0;
-      if (_GEN_10 & (|io_data_wen)) begin
+      else if (_GEN_43) begin
+        if (wr_resp)
+          w_state <= 4'h0;
+      end
+      else if (_GEN_44)
+        w_state <= _GEN_67;
+      else if (_GEN_49) begin
+        if (io_dev_rrdy)
+          w_state <= 4'h5;
+      end
+      else if (_GEN_51) begin
+        if (io_dev_rvalid)
+          w_state <= 4'h0;
+      end
+      else if (_GEN_52) begin
+        if (_GEN_53)
+          w_state <= 4'h8;
+        else if (io_dev_wrdy)
+          w_state <= 4'h7;
+      end
+      else if (_GEN_57) begin
+        if (wr_resp)
+          w_state <= 4'h6;
+      end
+      else if (_GEN_58) begin
+        if (io_dev_rrdy)
+          w_state <= 4'h9;
+      end
+      else if (_GEN_62)
+        w_state <= 4'h0;
+      if (_GEN_41 & (|io_data_wen)) begin
         wen_r <= io_data_wen;
         wdata <= io_data_wdata;
       end
+      if (_GEN_41 | _GEN_42 | _GEN_54 | ~_GEN_52 | _GEN_53 | ~io_dev_wrdy) begin
+      end
+      else
+        w_cnt_value <= w_cnt_value + 2'h1;
     end
-    wr_resp_REG <= io_dev_wrdy;
   end // always @(posedge)
-  blk_mem_gen_1 blk_mem_gen_1 (
+  blk_mem_gen_1 tagSram (
     .clka  (clock),
-    .wea   (tagSrams_0_wea),
-    .addra (tagSrams_3_addra),
-    .dina  (tagSrams_3_dina),
-    .douta (_blk_mem_gen_1_douta)
+    .wea   (_GEN_64),
+    .addra (_GEN),
+    .dina
+      (_GEN_48
+         ? _GEN_37
+         : _GEN_44
+             ? (_GEN_4 ? _GEN_34 : _GEN_37)
+             : _GEN_49 | ~(_GEN_51 | ~_GEN_65)
+                 ? _GEN_37
+                 : io_dev_rvalid | ~_GEN_38 ? _GEN_34 : 128'h0),
+    .douta (_tagSram_douta)
   );
-  blk_mem_gen_1 blk_mem_gen_1_1 (
+  blk_mem_gen_1 U_dsram (
     .clka  (clock),
-    .wea   (tagSrams_1_wea),
-    .addra (tagSrams_3_addra),
-    .dina  (tagSrams_3_dina),
-    .douta (_blk_mem_gen_1_1_douta)
+    .wea   (_GEN_64),
+    .addra (_GEN),
+    .dina
+      (_GEN_48
+         ? _GEN_39
+         : _GEN_44
+             ? (_GEN_4
+                  ? {(&(io_data_addr[3:2])) ? wdata : _U_dsram_douta[127:96],
+                     _GEN_47 ? wdata : _U_dsram_douta[95:64],
+                     _GEN_46 ? wdata : _U_dsram_douta[63:32],
+                     _GEN_45 ? wdata : _U_dsram_douta[31:0]}
+                  : _GEN_39)
+             : _GEN_49
+                 ? _GEN_39
+                 : _GEN_51
+                     ? (io_dev_rvalid
+                          ? {(&(io_data_addr[3:2])) ? wdata : io_dev_rdata[127:96],
+                             _GEN_47 ? wdata : io_dev_rdata[95:64],
+                             _GEN_46 ? wdata : io_dev_rdata[63:32],
+                             _GEN_45 ? wdata : io_dev_rdata[31:0]}
+                          : _GEN_40)
+                     : _GEN_65
+                         ? _GEN_39
+                         : io_dev_rvalid
+                             ? {(&(io_data_addr[3:2])) ? wdata : io_dev_rdata[127:96],
+                                _GEN_47 ? wdata : io_dev_rdata[95:64],
+                                _GEN_46 ? wdata : io_dev_rdata[63:32],
+                                _GEN_45 ? wdata : io_dev_rdata[31:0]}
+                             : _GEN_40),
+    .douta (_U_dsram_douta)
   );
-  blk_mem_gen_1 blk_mem_gen_1_2 (
-    .clka  (clock),
-    .wea   (tagSrams_2_wea),
-    .addra (tagSrams_3_addra),
-    .dina  (tagSrams_3_dina),
-    .douta (_blk_mem_gen_1_2_douta)
-  );
-  blk_mem_gen_1 blk_mem_gen_1_3 (
-    .clka  (clock),
-    .wea   (tagSrams_3_wea),
-    .addra (tagSrams_3_addra),
-    .dina  (tagSrams_3_dina),
-    .douta (_blk_mem_gen_1_3_douta)
-  );
-  blk_mem_gen_1 blk_mem_gen_1_4 (
-    .clka  (clock),
-    .wea   (~_GEN_10 & _GEN_15 | tagSrams_0_wea),
-    .addra (tagSrams_3_addra),
-    .dina  (_GEN_10 | ~_GEN_15 ? io_dev_rdata : _dataSrams_dina_T),
-    .douta (_blk_mem_gen_1_4_douta)
-  );
-  blk_mem_gen_1 blk_mem_gen_1_5 (
-    .clka  (clock),
-    .wea   (~_GEN_10 & _GEN_16 | tagSrams_1_wea),
-    .addra (tagSrams_3_addra),
-    .dina  (_GEN_10 | ~_GEN_16 ? io_dev_rdata : _dataSrams_dina_T),
-    .douta (_blk_mem_gen_1_5_douta)
-  );
-  blk_mem_gen_1 blk_mem_gen_1_6 (
-    .clka  (clock),
-    .wea   (~_GEN_10 & _GEN_17 | tagSrams_2_wea),
-    .addra (tagSrams_3_addra),
-    .dina  (_GEN_10 | ~_GEN_17 ? io_dev_rdata : _dataSrams_dina_T),
-    .douta (_blk_mem_gen_1_6_douta)
-  );
-  blk_mem_gen_1 blk_mem_gen_1_7 (
-    .clka  (clock),
-    .wea   (~_GEN_10 & _GEN_18 | tagSrams_3_wea),
-    .addra (tagSrams_3_addra),
-    .dina  (_GEN_10 | ~_GEN_18 ? io_dev_rdata : _dataSrams_dina_T),
-    .douta (_blk_mem_gen_1_7_douta)
-  );
-  assign io_data_valid = ~_GEN_5 & (_GEN_1 ? io_dev_rvalid : _GEN_4);
+  assign io_data_valid =
+    ~_GEN_25 & (_GEN_2 ? io_dev_rvalid : _GEN_3 ? _GEN_4 : ~_GEN_6 & _GEN_31);
   assign io_data_rdata =
-    _GEN_5
+    _GEN_25
       ? 32'h0
-      : _GEN_1
+      : _GEN_2
           ? (io_dev_rvalid ? io_dev_rdata[31:0] : 32'h0)
-          : _GEN_2 & (|_GEN_3) ? _GEN_7[io_data_addr[3:2]] : 32'h0;
-  assign io_data_wresp = ~(_GEN_10 | _GEN_11) & _GEN_19 & wr_resp;
-  assign io_dev_wen = _GEN_13 ? 4'h0 : wen_r;
-  assign io_dev_waddr = _GEN_13 ? 32'h0 : io_data_addr;
-  assign io_dev_wdata = _GEN_13 ? 32'h0 : wdata;
+          : _GEN_3
+              ? (_GEN_4 ? _GEN_5[io_data_addr[3:2]] : 32'h0)
+              : _GEN_6
+                  ? 32'h0
+                  : _GEN_7
+                      ? (io_dev_rvalid ? _GEN_8[io_data_addr[3:2]] : 32'h0)
+                      : _GEN_36 ? 32'h0 : io_dev_rdata[31:0];
+  assign io_data_wresp =
+    ~(_GEN_41 | _GEN_42)
+    & (_GEN_43
+         ? wr_resp
+         : _GEN_44 ? _GEN_4 : ~_GEN_49 & (_GEN_51 | ~_GEN_63 & _GEN_61) & io_dev_rvalid);
+  assign io_dev_wen =
+    _GEN_41
+      ? (_GEN_13 ? 4'h0 : _GEN_11)
+      : _GEN_42 ? (io_dev_wrdy ? wen_r : 4'h0) : _GEN_55 & _GEN_13 ? 4'h0 : _GEN_11;
+  assign io_dev_waddr =
+    _GEN_41
+      ? _GEN_15
+      : _GEN_42
+          ? (io_dev_wrdy ? io_data_addr : 32'h0)
+          : _GEN_55
+              ? _GEN_15
+              : io_dev_wrdy ? {io_data_addr[31:4], w_cnt_value, 2'h0} : 32'h0;
+  assign io_dev_wdata =
+    _GEN_41
+      ? _GEN_17
+      : _GEN_42
+          ? (io_dev_wrdy ? wdata : 32'h0)
+          : _GEN_55 ? _GEN_17 : io_dev_wrdy ? _GEN_56[w_cnt_value] : 32'h0;
   assign io_dev_ren =
-    _GEN
-      ? 4'h0
-      : _GEN_0
-          ? (io_dev_rrdy ? ren_r : 4'h0)
-          : _GEN_1 | ~_GEN_2 | (|_GEN_3) ? 4'h0 : {4{io_dev_rrdy}};
+    _GEN_60
+      ? _GEN_24
+      : _GEN_49 ? _GEN_50 : _GEN_51 ? 4'h0 : _GEN_59 | ~_GEN_58 ? _GEN_24 : _GEN_50;
   assign io_dev_raddr =
-    _GEN
-      ? 32'h0
-      : _GEN_0
-          ? (io_dev_rrdy ? io_data_addr : 32'h0)
-          : _GEN_1 | ~_GEN_2 | (|_GEN_3) | ~io_dev_rrdy
-              ? 32'h0
-              : {io_data_addr[31:4], 4'h0};
+    _GEN_60
+      ? _GEN_27
+      : _GEN_49
+          ? (io_dev_rrdy ? io_data_addr : _GEN_28)
+          : _GEN_51 | _GEN_59 | ~_GEN_58
+              ? _GEN_27
+              : io_dev_rrdy ? {io_data_addr[31:4], 4'h0} : _GEN_28;
 endmodule
 

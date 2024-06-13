@@ -7,7 +7,7 @@ import common.Constants
 
 import memory.blk_mem_gen_1
 
-class DCache(n: Int = 4) extends Module {
+class DCache extends Module {
   val io = IO(new Bundle {
     // Interface to CPU
     val data_ren   = Input(UInt(Constants.CacheLine_Len.W))
@@ -29,6 +29,8 @@ class DCache(n: Int = 4) extends Module {
     val dev_rvalid = Input(Bool())
     val dev_rdata  = Input(UInt(Constants.CacheLine_Width.W)) // Assuming `BLK_SIZE = 4 * 32`
   })
+
+  val wr_resp = ~RegNext(io.dev_wrdy) && io.dev_wrdy
 
   /* ---------- ---------- init ---------- ---------- */
 
@@ -55,31 +57,18 @@ class DCache(n: Int = 4) extends Module {
   val nonAlign = (io.data_addr & "b011".U(Constants.Addr_Width.W)).orR
 
   /* ---------- ---------- sram ---------- ---------- */
+  import memory.blk_mem_gen_1
 
-  val tagSrams  = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
-  val dataSrams = VecInit(Seq.fill(n)(Module(new blk_mem_gen_1).io))
-
-// Configure each SRAM module
-  for (i <- 0 until n) {
-    tagSrams(i).dina := DontCare
-    tagSrams(i).wea  := false.B
-    tagSrams(i).clka := clock
-
-    dataSrams(i).dina := DontCare
-    dataSrams(i).wea  := false.B
-    dataSrams(i).clka := clock
-  }
-
-  // val tagSram = Module(new blk_mem_gen_1)
-  // tagSram.io.addra := 0.U
-  // tagSram.io.dina  := 0.U
-  // tagSram.io.wea   := 0.U
-  // tagSram.io.clka  := clock
-  // val U_dsram = Module(new blk_mem_gen_1)
-  // U_dsram.io.addra := 0.U
-  // U_dsram.io.dina  := 0.U
-  // U_dsram.io.wea   := 0.U
-  // U_dsram.io.clka  := clock
+  val tagSram = Module(new blk_mem_gen_1)
+  tagSram.io.addra := 0.U
+  tagSram.io.dina  := 0.U
+  tagSram.io.wea   := 0.U
+  tagSram.io.clka  := clock
+  val U_dsram = Module(new blk_mem_gen_1)
+  U_dsram.io.addra := 0.U
+  U_dsram.io.dina  := 0.U
+  U_dsram.io.wea   := 0.U
+  U_dsram.io.clka  := clock
 
   /* ---------- ---------- addr 划分 ---------- ---------- */
 
@@ -89,36 +78,27 @@ class DCache(n: Int = 4) extends Module {
 
   /* ---------- ---------- sram 数据通路 ---------- ---------- */
 
-  val hitVec = WireInit(VecInit(Seq.fill(n)(false.B)))
+  tagSram.io.addra := index
+  U_dsram.io.addra := index
 
-  val hit_i = WireInit(0.U(log2Ceil(n).W))
-  for (i <- 0 until n) {
-    tagSrams(i).addra  := index
-    dataSrams(i).addra := index
-    when(tagSrams(i).douta(Constants.Tag_Width, 0) === Cat(1.U, tag)) { // 只有命中了，才会走下面这个流程
-      hitVec(i) := true.B
-      hit_i     := i.asUInt
-    }
-  }
-
-  // tagSram.io.addra := index
-  // U_dsram.io.addra := index
-
-  /* ---------- ---------- victim ---------- ---------- */
-
-  val cnt = Counter(n)
-  cnt.inc()
-  val victim = cnt.value
+  val is_hit   = tagSram.io.douta(Constants.Tag_Width - 1, 0) === tag
+  val is_valid = tagSram.io.douta(Constants.Tag_Width)
+  val is_dirty = tagSram.io.douta(Constants.Tag_Width + 1)
 
   /* ---------- read ---------- */
 
-  val r_IDLE :: r_NOCACHE0 /* 发送请求 */ :: r_NOCACHE1 /* 准备接受 */ :: r_CHECK :: r_REFILL1 :: Nil = Enum(5)
-  val r_state                                                                                 = RegInit(r_IDLE)
+  val r_IDLE :: r_NOCACHE0 :: r_NOCACHE1 :: r_CHECK :: r_CLEAN_REFILL0 :: r_CLEAN_REFILL1 :: r_WRITEBACK0 :: r_WRITEBACK1 :: r_DIRTY_REFILL0 :: r_DIRTY_REFILL1 :: Nil = Enum(10)
+  val r_state                                                                                                                                                          = RegInit(r_IDLE)
+  dontTouch(r_state)
 
   val ren_r = RegInit(0.U(Constants.CacheLine_Len.W))
 
+  /* write 计数器 */
+  val r_cnt = Counter(Constants.CacheLine_Len)
+  dontTouch(r_cnt.value)
+
   switch(r_state) {
-    is(r_IDLE) {
+    is(r_IDLE) { // 0
       when(io.data_ren =/= 0.U) {
         ren_r := io.data_ren
         when(uncached || nonAlign) { /* 直接访问主存 */
@@ -128,14 +108,14 @@ class DCache(n: Int = 4) extends Module {
         }
       }
     }
-    is(r_NOCACHE0) {
+    is(r_NOCACHE0) { // 1
       when(io.dev_rrdy) {
         io.dev_ren   := ren_r
         io.dev_raddr := io.data_addr
         r_state      := r_NOCACHE1
       }
     }
-    is(r_NOCACHE1) {
+    is(r_NOCACHE1) { // 2
       io.dev_ren := 0.U
       when(io.dev_rvalid) {
         io.data_rdata := io.dev_rdata
@@ -143,78 +123,222 @@ class DCache(n: Int = 4) extends Module {
         r_state       := r_IDLE
       }
     }
-    is(r_CHECK) {
-      when(hitVec.asUInt =/= 0.U) { /* hit */
-        io.data_valid := true.B
-        val line = dataSrams(hit_i).douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+    is(r_CHECK) { // 3
+      when(is_hit && is_valid) { /* hit */
+        hit_r := true.B
+        val line = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
         io.data_rdata := line(offset)
+        io.data_valid := true.B
         r_state       := r_IDLE
-        hit_r         := true.B
       }.otherwise { /* miss -> refill */
-        when(io.dev_rrdy) {
-          io.dev_ren   := "b1111".U(4.W)
-          io.dev_raddr := Cat(tag, index, 0.U((Constants.Offset_Width + Constants.Word_Align).W))
-          r_state      := r_REFILL1
+        when(is_dirty && is_valid) { /* 脏数据，写回，然后再载入 */
+          r_state := r_WRITEBACK0
+        }.otherwise { /* 不是脏数据，那么直接载入 */
+          r_state := r_CLEAN_REFILL0
         }
       }
     }
-    is(r_REFILL1) {
+    is(r_CLEAN_REFILL0) { // 4
+      when(io.dev_rrdy) {
+        io.dev_ren   := "b1111".U(4.W)
+        io.dev_raddr := Cat(tag, index, 0.U((Constants.Offset_Width + Constants.Word_Align).W))
+        r_state      := r_CLEAN_REFILL1
+      }
+    }
+    is(r_CLEAN_REFILL1) { // 5
       when(io.dev_rvalid) {
         /* 更新 cache */
-        tagSrams(victim).wea   := true.B
-        tagSrams(victim).dina  := Cat(1.U, tag)
-        dataSrams(victim).wea  := true.B
-        dataSrams(victim).dina := io.dev_rdata
+        tagSram.io.wea  := true.B
+        tagSram.io.dina := Cat(0.U, 1.U, tag)
+        U_dsram.io.wea  := true.B
+        U_dsram.io.dina := io.dev_rdata
+
+        /* 对外返回响应 */
+        val line = io.dev_rdata.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+        io.data_rdata := line(offset)
+        io.data_valid := true.B
 
         /* 状态 */
-        r_state := r_CHECK
+        r_state := r_IDLE
+      }
+    }
+    is(r_WRITEBACK0) { // 6
+      when(RegNext(r_cnt.value) === (Constants.CacheLine_Len - 1).U && r_cnt.value === 0.U /* 到点了 */ ) { /* 跳入 write allocate 状态 */
+        r_state := r_DIRTY_REFILL0
+      }.otherwise {
+        when(io.dev_wrdy) { /* write back */
+          /* 定义临时变量 */
+          val waddr = Cat(tag, index, r_cnt.value(Constants.Offset_Width - 1, 0), 0.U(Constants.Word_Align.W)) /* 合成地址 */
+          val line  = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+
+          /* trigger */
+          io.dev_wen   := "b1111".U(4.W)
+          io.dev_waddr := waddr
+          io.dev_wdata := line(r_cnt.value)
+          r_cnt.inc()
+
+          /* 状态 */
+          r_state := r_WRITEBACK1
+        }
+      }
+    }
+    is(r_WRITEBACK1) { // 7
+      when(wr_resp) {
+        r_state := r_WRITEBACK0
+      }
+    }
+    is(r_DIRTY_REFILL0) { // 8
+      when(io.dev_rrdy) {
+        io.dev_ren   := "b1111".U(4.W)
+        io.dev_raddr := Cat(tag, index, 0.U((Constants.Offset_Width + Constants.Word_Align).W))
+        r_state      := r_DIRTY_REFILL1
+      }
+    }
+    is(r_DIRTY_REFILL1) { // 9
+      when(io.dev_rvalid) {
+        tagSram.io.wea  := true.B
+        tagSram.io.dina := Cat(1.U, 1.U, tag)
+        U_dsram.io.wea  := true.B
+        U_dsram.io.dina := io.dev_rdata
+
+        /* 响应, 状态 */
+        io.data_rdata := io.dev_rdata
+        io.data_valid := true.B
+        r_state       := r_IDLE
       }
     }
   }
 
   /* ---------- write ---------- */
 
-  val w_IDLE :: w_STAT0 :: w_STAT1 :: Nil = Enum(3)
-  val w_state                             = RegInit(w_IDLE)
+  val w_IDLE :: w_STAT0_uncached :: w_STAT1_uncached :: w_TAG_CHECK :: w_CLEAN_REFILL0 :: w_CLEAN_REFILL1 :: w_WRITEBACK0 :: w_WRITEBACK1 :: w_DIRTY_REFILL0 :: w_DIRTY_REFILL1 :: Nil = Enum(10)
+  val w_state                                                                                                                                                                          = RegInit(w_IDLE)
+  dontTouch(w_state)
 
   val wen_r = RegInit(0.U(Constants.CacheLine_Len.W))
   val wdata = RegInit(0.U(Constants.Word_Width.W)) /* 这个必须有，因为 wdata 会立即撤销 */
 
-  // /* io.dev_wrdy 再次拉高的时候，就行了 */
-  // val wr_resp = io.dev_wrdy & (io.dev_wen === 0.U)
-  val wr_resp = ~RegNext(io.dev_wrdy) && io.dev_wrdy
+  /* write 计数器 */
+  val w_cnt = Counter(Constants.CacheLine_Len)
+  dontTouch(w_cnt.value)
 
+  /* 状态机 */
   switch(w_state) {
-    is(w_IDLE) {
+    is(w_IDLE) { // 0
       when(io.data_wen =/= 0.U) {
-        wen_r   := io.data_wen
-        wdata   := io.data_wdata
-        w_state := w_STAT0
+        wen_r := io.data_wen
+        wdata := io.data_wdata
+        when(uncached || nonAlign) { /* 如果是不 cache */
+          w_state := w_STAT0_uncached
+        }.otherwise {
+          w_state := w_TAG_CHECK
+        }
       }
     }
-    is(w_STAT0) {
+    is(w_STAT0_uncached) { // 1
       when(io.dev_wrdy) {
         io.dev_wen   := wen_r
         io.dev_waddr := io.data_addr
         io.dev_wdata := wdata
-        w_state      := w_STAT1
-        when(~uncached && ~nonAlign && hitVec.asUInt =/= 0.U) { /* cacheline 直接作废 */
-          val line = dataSrams(hit_i).douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
-          line(offset)          := wdata
-          dataSrams(hit_i).wea  := true.B
-          dataSrams(hit_i).dina := line.asUInt
-          hit_w                 := true.B
-        }
+        w_state      := w_STAT1_uncached
       }
     }
-    is(w_STAT1) {
+    is(w_STAT1_uncached) { // 2
       when(wr_resp) {
         io.data_wresp := true.B
         w_state       := w_IDLE
       }
     }
-  }
+    is(w_TAG_CHECK) { // 3
+      when(is_hit && is_valid) { /* 命中了 */
+        tagSram.io.wea  := true.B
+        tagSram.io.dina := Cat(1.U, 1.U, tag)
+        U_dsram.io.wea  := true.B
+        val line = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+        line(offset)    := wdata
+        U_dsram.io.dina := line.asUInt
+        hit_w           := true.B
 
+        /* 响应, 状态 */
+        io.data_wresp := true.B
+        w_state       := w_IDLE
+      }.otherwise { /* 没命中 */
+        when(is_dirty && is_valid) { /* 脏数据，写回，然后再载入 */
+          w_state := w_WRITEBACK0
+        }.otherwise { /* 不是脏数据，那么直接载入 */
+          w_state := w_CLEAN_REFILL0
+        }
+      }
+    }
+    is(w_CLEAN_REFILL0) { // 4
+      when(io.dev_rrdy) {
+        io.dev_ren   := "b1111".U(4.W)
+        io.dev_raddr := io.data_addr
+        w_state      := w_CLEAN_REFILL1
+      }
+    }
+    is(w_CLEAN_REFILL1) { // 5
+      io.dev_ren := 0.U
+      when(io.dev_rvalid) {
+        tagSram.io.wea  := true.B
+        tagSram.io.dina := Cat(1.U, 1.U, tag)
+        U_dsram.io.wea  := true.B
+        val line = io.dev_rdata.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+        line(offset)    := wdata
+        U_dsram.io.dina := line.asUInt
+
+        /* 响应, 状态 */
+        io.data_wresp := true.B
+        w_state       := w_IDLE
+      }
+    }
+    is(w_WRITEBACK0) { // 6
+      when(RegNext(w_cnt.value) === (Constants.CacheLine_Len - 1).U && w_cnt.value === 0.U) { /* 跳入 write allocate 状态 */
+        w_state := w_DIRTY_REFILL0
+      }.otherwise {
+        when(io.dev_wrdy) { /* write back */
+          /* 定义临时变脸 */
+          val waddr = Cat(tag, index, w_cnt.value(Constants.Offset_Width - 1, 0), 0.U(Constants.Word_Align.W)) /* 合成地址 */
+          val line  = U_dsram.io.douta.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+
+          /* trigger */
+          io.dev_wen   := "b1111".U(4.W)
+          io.dev_waddr := waddr
+          io.dev_wdata := line(w_cnt.value)
+          w_cnt.inc()
+
+          /* 状态 */
+          w_state := w_WRITEBACK1
+        }
+      }
+    }
+    is(w_WRITEBACK1) { // 7
+      when(wr_resp) {
+        w_state := w_WRITEBACK0
+      }
+    }
+    is(w_DIRTY_REFILL0) { // 8
+      when(io.dev_rrdy) {
+        io.dev_ren   := "b1111".U(4.W)
+        io.dev_raddr := Cat(tag, index, 0.U((Constants.Offset_Width + Constants.Word_Align).W))
+        w_state      := w_DIRTY_REFILL1
+      }
+    }
+    is(w_DIRTY_REFILL1) { // 9
+      when(io.dev_rvalid) {
+        val line = io.dev_rdata.asTypeOf(Vec(Constants.CacheLine_Len, UInt(Constants.Word_Width.W)))
+        line(offset)    := wdata
+        tagSram.io.wea  := true.B
+        tagSram.io.dina := Cat(1.U, 1.U, tag)
+        U_dsram.io.wea  := true.B
+        U_dsram.io.dina := line.asUInt
+
+        /* 响应, 状态 */
+        io.data_wresp := true.B
+        w_state       := w_IDLE
+      }
+    }
+  }
 }
 
 import _root_.circt.stage.ChiselStage

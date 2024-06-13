@@ -29,7 +29,8 @@ class ICache(n: Int = 4) extends Module {
   io.inst_out   := DontCare
   io.mem_ren    := 0.U
   io.mem_raddr  := DontCare
-  val hit = RegInit(false.B)
+
+  val hit = WireInit(false.B)
   dontTouch(hit);
 
   /* ---------- ---------- 初始化 sram ---------- ---------- */

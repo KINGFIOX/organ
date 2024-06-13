@@ -24,7 +24,6 @@ module ICache(
   wire [127:0]     _blk_mem_gen_1_1_douta;
   wire [127:0]     _blk_mem_gen_1_douta;
   wire [3:0][31:0] _GEN = '{32'h0, 32'h0, 32'h0, 32'h0};
-  reg              hit;
   wire [5:0]       tagSrams_3_addra = {1'h0, io_inst_addr[8:4]};
   wire [23:0]      _tagSrams_dina_T = {1'h1, io_inst_addr[31:9]};
   wire             hitVec_0 = _blk_mem_gen_1_douta[23:0] == _tagSrams_dina_T;
@@ -36,6 +35,7 @@ module ICache(
   wire             _GEN_0 = state == 2'h0;
   wire             _GEN_1 = state == 2'h1;
   wire [3:0]       _GEN_2 = {hitVec_3, hitVec_2, hitVec_1, hitVec_0};
+  wire             hit = ~_GEN_0 & _GEN_1 & (|_GEN_2);
   wire [3:0][31:0] _GEN_3 =
     hitVec_3
       ? {{_blk_mem_gen_1_7_douta[127:96]},
@@ -68,7 +68,6 @@ module ICache(
   wire [127:0]     tagSrams_3_dina = {105'h1, io_inst_addr[31:9]};
   always @(posedge clock) begin
     if (reset) begin
-      hit <= 1'h0;
       cnt_value <= 2'h0;
       state <= 2'h0;
     end
@@ -78,7 +77,6 @@ module ICache(
          {io_mem_rrdy ? 2'h3 : state},
          {{~(|_GEN_2), 1'h0}},
          {io_inst_rreq ? 2'h1 : state}};
-      hit <= ~_GEN_0 & _GEN_1 & (|_GEN_2) | hit;
       cnt_value <= cnt_value + 2'h1;
       state <= _GEN_7[state];
     end
@@ -139,7 +137,7 @@ module ICache(
     .dina  (io_mem_rdata),
     .douta (_blk_mem_gen_1_7_douta)
   );
-  assign io_inst_valid = ~_GEN_0 & _GEN_1 & (|_GEN_2);
+  assign io_inst_valid = hit;
   assign io_inst_out = _GEN_3[io_inst_addr[3:2]];
   assign io_mem_ren = _GEN_0 | _GEN_1 ? 4'h0 : {4{_GEN_4 & io_mem_rrdy}};
   assign io_mem_raddr = {io_inst_addr[31:4], 4'h0};
